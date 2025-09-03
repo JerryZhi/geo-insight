@@ -1,7 +1,18 @@
 #!/bin/bash
 
 #########################################
-# GEO Insight MVP - 一键部署脚本
+# GEO Insight MV# 更新系统包
+update_system() {
+    log_info "更新系统包..."
+    apt update && apt upgrade -y
+    apt install -y curl wget git vim unzip software-properties-common build-essential cron
+    
+    # 启动cron服务
+    systemctl start cron
+    systemctl enable cron
+    
+    log_success "系统包更新完成"
+}署脚本
 # 适用于 Debian/Ubuntu 服务器
 # 作者: GEO Insight Team
 # 版本: 1.0.0
@@ -449,8 +460,14 @@ install_ssl() {
     if [[ "$DOMAIN" != "your-domain.com" ]]; then
         certbot --nginx -d $DOMAIN -d www.$DOMAIN --email $EMAIL --agree-tos --no-eff-email --non-interactive
         
-        # 设置自动续期
-        (crontab -l 2>/dev/null; echo "0 12 * * * /usr/bin/certbot renew --quiet") | crontab -
+        # 设置自动续期（检查crontab是否可用）
+        if command -v crontab &> /dev/null; then
+            (crontab -l 2>/dev/null; echo "0 12 * * * /usr/bin/certbot renew --quiet") | crontab -
+            log_success "SSL证书自动续期已设置"
+        else
+            log_warning "crontab不可用，请手动设置SSL证书续期"
+            log_info "手动设置命令: echo '0 12 * * * /usr/bin/certbot renew --quiet' | crontab -"
+        fi
         
         log_success "SSL证书安装完成"
     else
@@ -481,8 +498,14 @@ EOF
 
     chmod +x $INSTALL_DIR/monitor.sh
     
-    # 添加到crontab
-    (crontab -l 2>/dev/null; echo "*/5 * * * * $INSTALL_DIR/monitor.sh") | crontab -
+    # 添加到crontab（检查crontab是否可用）
+    if command -v crontab &> /dev/null; then
+        (crontab -l 2>/dev/null; echo "*/5 * * * * $INSTALL_DIR/monitor.sh") | crontab -
+        log_success "监控脚本已添加到crontab"
+    else
+        log_warning "crontab不可用，请手动添加监控任务"
+        log_info "手动添加命令: echo '*/5 * * * * $INSTALL_DIR/monitor.sh' | crontab -"
+    fi
     
     log_success "监控脚本创建完成"
 }
