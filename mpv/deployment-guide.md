@@ -52,7 +52,7 @@
 2. **方法二：使用 Git 仓库**
    ```bash
    # 先将代码推送到 Git 仓库，然后在服务器上克隆
-   git clone https://your-repo.git /tmp/geo-insight
+   git clone https://github.com/你的用户名/geo-insight.git /tmp/geo-insight
    ```
 
 #### 第三步：运行部署脚本
@@ -219,6 +219,27 @@ sudo supervisorctl start geo-insight
    ```bash
    # 手动申请证书
    sudo certbot --nginx -d your-domain.com
+   ```
+
+5. **Python安装问题**
+   ```bash
+   # 如果遇到 "Unable to locate package python3.9" 错误
+   # 解决方案1: 手动添加PPA源
+   sudo apt update
+   sudo apt install -y software-properties-common
+   sudo add-apt-repository -y ppa:deadsnakes/ppa
+   sudo apt update
+   sudo apt install -y python3.9 python3.9-pip python3.9-venv python3.9-dev
+   
+   # 解决方案2: 使用系统默认Python版本（如果3.9不可用）
+   sudo apt install -y python3 python3-pip python3-venv python3-dev
+   # 检查版本: python3 --version
+   ```
+
+6. **缺少bc命令错误**
+   ```bash
+   # 已在新版本脚本中修复，如果仍有问题：
+   sudo apt install -y bc
    ```
 
 ### 📞 技术支持

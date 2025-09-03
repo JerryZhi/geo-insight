@@ -73,7 +73,7 @@ check_system() {
 update_system() {
     log_info "更新系统包..."
     apt update && apt upgrade -y
-    apt install -y curl wget git vim unzip software-properties-common
+    apt install -y curl wget git vim unzip software-properties-common build-essential
     log_success "系统包更新完成"
 }
 
@@ -84,19 +84,85 @@ install_python() {
     # 检查Python版本
     if command -v python3 &> /dev/null; then
         PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
-        if (( $(echo "$PYTHON_VERSION >= 3.9" | bc -l) )); then
-            log_success "Python $PYTHON_VERSION 已安装"
+        # 使用原生bash比较，避免依赖bc
+        MAJOR=$(echo "$PYTHON_VERSION" | cut -d'.' -f1)
+        MINOR=$(echo "$PYTHON_VERSION" | cut -d'.' -f2)
+        if [ "$MAJOR" -gt 3 ] || ([ "$MAJOR" -eq 3 ] && [ "$MINOR" -ge 9 ]); then
+            log_success "Python $PYTHON_VERSION 已安装，满足要求"
+            # 确保pip可用
+            if ! command -v pip3 &> /dev/null; then
+                log_info "安装pip..."
+                apt install -y python3-pip
+            fi
             return
         fi
     fi
     
-    # 安装Python 3.9+
-    apt install -y python3.9 python3.9-pip python3.9-venv python3.9-dev
+    # 获取系统信息
+    source /etc/os-release
     
-    # 设置默认Python版本
-    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
+    # 针对不同系统版本使用不同安装策略
+    if [[ "$ID" == "ubuntu" ]]; then
+        # Ubuntu系统
+        VERSION_ID_MAJOR=$(echo "$VERSION_ID" | cut -d'.' -f1)
+        if [ "$VERSION_ID_MAJOR" -ge 20 ]; then
+            # Ubuntu 20.04+ 可以直接安装python3.9
+            log_info "检测到Ubuntu $VERSION_ID，尝试直接安装Python 3.9..."
+            apt install -y python3.9 python3.9-pip python3.9-venv python3.9-dev python3.9-distutils 2>/dev/null || {
+                log_warning "直接安装失败，添加deadsnakes PPA..."
+                install_python_with_ppa
+            }
+        else
+            # 旧版Ubuntu需要PPA
+            log_info "检测到旧版Ubuntu $VERSION_ID，添加deadsnakes PPA..."
+            install_python_with_ppa
+        fi
+    elif [[ "$ID" == "debian" ]]; then
+        # Debian系统
+        VERSION_ID_MAJOR=$(echo "$VERSION_ID" | cut -d'.' -f1)
+        if [ "$VERSION_ID_MAJOR" -ge 11 ]; then
+            # Debian 11+ 可能有python3.9
+            log_info "检测到Debian $VERSION_ID，尝试直接安装Python 3.9..."
+            apt install -y python3.9 python3.9-pip python3.9-venv python3.9-dev python3.9-distutils 2>/dev/null || {
+                log_warning "直接安装失败，使用默认Python版本..."
+                install_default_python
+            }
+        else
+            log_info "检测到旧版Debian $VERSION_ID，使用默认Python版本..."
+            install_default_python
+        fi
+    fi
     
-    log_success "Python安装完成"
+    # 设置默认Python版本（如果安装了3.9）
+    if command -v python3.9 &> /dev/null; then
+        update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
+        log_success "Python 3.9 安装完成"
+    else
+        log_success "Python 安装完成"
+    fi
+}
+
+# 使用PPA安装Python
+install_python_with_ppa() {
+    apt install -y software-properties-common
+    add-apt-repository -y ppa:deadsnakes/ppa
+    apt update
+    apt install -y python3.9 python3.9-pip python3.9-venv python3.9-dev python3.9-distutils
+}
+
+# 安装默认Python版本
+install_default_python() {
+    log_warning "安装系统默认Python版本（可能不是3.9+）"
+    apt install -y python3 python3-pip python3-venv python3-dev
+    
+    # 检查版本是否满足要求
+    PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
+    MAJOR=$(echo "$PYTHON_VERSION" | cut -d'.' -f1)
+    MINOR=$(echo "$PYTHON_VERSION" | cut -d'.' -f2)
+    if [ "$MAJOR" -lt 3 ] || ([ "$MAJOR" -eq 3 ] && [ "$MINOR" -lt 9 ]); then
+        log_error "Python版本 $PYTHON_VERSION 过低，建议升级系统或手动安装Python 3.9+"
+        log_error "应用可能无法正常运行"
+    fi
 }
 
 # 安装Nginx
