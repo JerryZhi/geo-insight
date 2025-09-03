@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>查询历史 - GEO Insight</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <style>
+        .navbar-brand {
+            font-weight: bold;
+            color: #667eea !important;
+        }
+        .card {
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 25px;
+        }
+        .table th {
+            background-color: #f8f9fa;
+            border: none;
+        }
+        .badge {
+            font-size: 0.8em;
+        }
+        .task-row:hover {
+            background-color: #f8f9fa;
+        }
+        .progress {
+            height: 8px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('dashboard') }}">
+                <i class="bi bi-graph-up"></i> GEO Insight
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('dashboard') }}">
+                            <i class="bi bi-house"></i> 仪表板
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('new_task') }}">
+                            <i class="bi bi-plus-circle"></i> 新建任务
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{{ url_for('history') }}">
+                            <i class="bi bi-clock-history"></i> 历史记录
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('profile') }}">
+                            <i class="bi bi-gear"></i> 配置管理
+                        </a>
+                    </li>
+                </ul>
+                <ul class="navbar-nav">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-person-circle"></i> {{ g.current_user.username }}
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('profile') }}">个人设置</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('logout') }}">退出登录</a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-info alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- 页面标题 -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2><i class="bi bi-clock-history text-primary"></i> 查询历史</h2>
+                <p class="text-muted">查看所有监测任务的历史记录和结果</p>
+            </div>
+            <a href="{{ url_for('new_task') }}" class="btn btn-primary">
+                <i class="bi bi-plus"></i> 新建任务
+            </a>
+        </div>
+
+        <!-- 统计卡片 -->
+        <div class="row mb-4">
+            <div class="col-md-3 mb-3">
+                <div class="card bg-primary text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h6>总任务数</h6>
+                                <h4>{{ history|length }}</h4>
+                            </div>
+                            <i class="bi bi-list-task" style="font-size: 2rem;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card bg-success text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h6>已完成</h6>
+                                <h4>{{ history|selectattr('status', 'equalto', 'completed')|list|length }}</h4>
+                            </div>
+                            <i class="bi bi-check-circle" style="font-size: 2rem;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card bg-warning text-dark">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h6>进行中</h6>
+                                <h4>{{ history|selectattr('status', 'equalto', 'pending')|list|length }}</h4>
+                            </div>
+                            <i class="bi bi-clock" style="font-size: 2rem;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card bg-danger text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h6>失败</h6>
+                                <h4>{{ history|selectattr('status', 'equalto', 'failed')|list|length }}</h4>
+                            </div>
+                            <i class="bi bi-x-circle" style="font-size: 2rem;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 历史记录表格 -->
+        <div class="card">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-table"></i> 任务列表
+                </h5>
+                <div class="d-flex align-items-center">
+                    <span class="text-muted me-3">共 {{ history|length }} 条记录</span>
+                    <select class="form-select form-select-sm" id="statusFilter" style="width: auto;">
+                        <option value="">全部状态</option>
+                        <option value="completed">已完成</option>
+                        <option value="pending">进行中</option>
+                        <option value="failed">失败</option>
+                    </select>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                {% if history %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="width: 25%;">任务名称</th>
+                                    <th style="width: 15%;">API配置</th>
+                                    <th style="width: 10%;">Prompts</th>
+                                    <th style="width: 15%;">完成度</th>
+                                    <th style="width: 10%;">状态</th>
+                                    <th style="width: 15%;">创建时间</th>
+                                    <th style="width: 10%;">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for task in history %}
+                                <tr class="task-row" data-status="{{ task.status }}">
+                                    <td>
+                                        <div>
+                                            <strong>{{ task.task_name or '未命名任务' }}</strong>
+                                            {% if task.completed_at %}
+                                                <br><small class="text-muted">
+                                                    完成时间：{{ task.completed_at[:19].replace('T', ' ') }}
+                                                </small>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-secondary">
+                                            {{ task.api_name or '已删除配置' }}
+                                        </span>
+                                        {% if task.endpoint %}
+                                            <br><small class="text-muted">{{ task.endpoint[:30] }}...</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="fw-bold">{{ task.total_prompts }}</span>
+                                        <br><small class="text-muted">个queries</small>
+                                    </td>
+                                    <td>
+                                        {% set progress = (task.completed_prompts / task.total_prompts * 100) if task.total_prompts > 0 else 0 %}
+                                        <div class="progress mb-1">
+                                            <div class="progress-bar 
+                                                {% if task.status == 'completed' %}bg-success
+                                                {% elif task.status == 'failed' %}bg-danger
+                                                {% else %}bg-warning{% endif %}"
+                                                 role="progressbar" style="width: {{ progress }}%">
+                                            </div>
+                                        </div>
+                                        <small class="text-muted">
+                                            {{ task.completed_prompts }}/{{ task.total_prompts }}
+                                            ({{ "%.1f"|format(progress) }}%)
+                                        </small>
+                                    </td>
+                                    <td>
+                                        {% if task.status == 'completed' %}
+                                            <span class="badge bg-success">
+                                                <i class="bi bi-check-circle"></i> 已完成
+                                            </span>
+                                        {% elif task.status == 'pending' %}
+                                            <span class="badge bg-warning">
+                                                <i class="bi bi-clock"></i> 进行中
+                                            </span>
+                                        {% elif task.status == 'failed' %}
+                                            <span class="badge bg-danger">
+                                                <i class="bi bi-x-circle"></i> 失败
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">未知</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="fw-bold">{{ task.created_at[:10] }}</span>
+                                        <br><small class="text-muted">{{ task.created_at[11:19] }}</small>
+                                    </td>
+                                    <td>
+                                        {% if task.status == 'completed' and task.results_file %}
+                                            <div class="btn-group-vertical btn-group-sm" role="group">
+                                                <a href="{{ url_for('view_results', result_id=task.task_id) }}" 
+                                                   class="btn btn-outline-primary btn-sm">
+                                                    <i class="bi bi-eye"></i> 查看
+                                                </a>
+                                                <a href="{{ url_for('download_results', result_id=task.task_id) }}" 
+                                                   class="btn btn-outline-success btn-sm">
+                                                    <i class="bi bi-download"></i> 下载
+                                                </a>
+                                            </div>
+                                        {% elif task.status == 'pending' %}
+                                            <button class="btn btn-outline-warning btn-sm" disabled>
+                                                <i class="bi bi-hourglass"></i> 处理中
+                                            </button>
+                                        {% else %}
+                                            <button class="btn btn-outline-secondary btn-sm" disabled>
+                                                <i class="bi bi-x"></i> 无结果
+                                            </button>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-inbox" style="font-size: 4rem; color: #ccc;"></i>
+                        <h4 class="mt-3 text-muted">还没有任务记录</h4>
+                        <p class="text-muted">创建您的第一个监测任务</p>
+                        <a href="{{ url_for('new_task') }}" class="btn btn-primary">
+                            <i class="bi bi-plus"></i> 新建任务
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 状态筛选功能
+        document.getElementById('statusFilter').addEventListener('change', function() {
+            const selectedStatus = this.value;
+            const rows = document.querySelectorAll('.task-row');
+            
+            rows.forEach(row => {
+                if (selectedStatus === '' || row.dataset.status === selectedStatus) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+
+        // 自动刷新进行中的任务（可选）
+        const pendingTasks = document.querySelectorAll('[data-status="pending"]');
+        if (pendingTasks.length > 0) {
+            // 每30秒刷新一次页面来更新进行中的任务状态
+            setTimeout(() => {
+                window.location.reload();
+            }, 30000);
+        }
+    </script>
+</body>
+</html>
