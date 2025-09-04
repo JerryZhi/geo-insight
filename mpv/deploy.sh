@@ -2,53 +2,7 @@
 
 #########################################
 # GEO Insight MV# 更新系统包
-update_system() {
-    log_info "更新系统包..."
-    
-    # 确保apt在非交互模式下运行
-    export DEBIAN_FRONTEND=noninteractive
-    
-    # 修复可能损坏的包
-    log_info "修复包依赖..."
-    apt --fix-broken install -y
-    dpkg --configure -a
-    
-    # 更新包列表，重试机制
-    log_info "更新包列表..."
-    for i in {1..3}; do
-        if apt update; then
-            break
-        else
-            log_warning "更新失败，重试 $i/3..."
-            sleep 5
-        fi
-    done
-    
-    # 升级系统
-    log_info "升级系统包..."
-    apt upgrade -y
-    
-    # 安装基础工具
-    log_info "安装基础工具..."
-    apt install -y \
-        curl wget git vim nano unzip zip \
-        software-properties-common \
-        build-essential \
-        cron \
-        apt-transport-https \
-        ca-certificates \
-        gnupg \
-        lsb-release \
-        net-tools \
-        htop \
-        tree
-    
-    # 启动并启用cron服务
-    systemctl start cron
-    systemctl enable cron
-    
-    log_success "系统包更新完成"
-}署脚本
+## ...existing code...
 # 适用于 Debian/Ubuntu 服务器
 # 作者: GEO Insight Team
 # 版本: 1.0.0
