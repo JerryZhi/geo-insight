@@ -483,7 +483,7 @@ EOF
     
     # 简单的注释掉 app.run 行
     if grep -q "app.run(debug=True" $INSTALL_DIR/app/app.py; then
-        sed -i 's/^    app\.run(debug=True, host=.*$/    # Production: use gunicorn instead\n    # &/' $INSTALL_DIR/app/app.py
+        sed -i 's/^    app\.run(debug=True, host=.*$/    # Production: use gunicorn instead\n    # app.run(debug=True, host='\''0.0.0.0'\'', port=5000)/' $INSTALL_DIR/app/app.py
         log_success "app.py 生产环境配置完成"
     else
         log_warning "未找到需要替换的app.run语句"
