@@ -469,8 +469,34 @@ if __name__ == "__main__":
     app.run(host='127.0.0.1', port=port)
 EOF
     
-    # 修改app.py中的调试设置
-    sed -i "s/app.run(debug=True, host='0.0.0.0', port=5000)/# Production: use gunicorn/" $INSTALL_DIR/app/app.py
+    # 修改app.py中的调试设置，避免缩进错误
+    log_info "修复app.py中的生产环境配置..."
+    
+    # 更安全的替换方式，保持正确的缩进
+    if grep -q "app.run(debug=True" $INSTALL_DIR/app/app.py; then
+        # 创建临时文件进行替换
+        python3 << 'EOF'
+import re
+
+# 读取文件
+with open('/opt/geo-insight/app/app.py', 'r') as f:
+    content = f.read()
+
+# 查找并替换app.run行，保持正确缩进
+pattern = r'(\s*)app\.run\(debug=True.*?\)'
+replacement = r'\1# Production: use gunicorn instead\n\1# app.run(debug=True, host="0.0.0.0", port=5000)'
+
+new_content = re.sub(pattern, replacement, content)
+
+# 写入文件
+with open('/opt/geo-insight/app/app.py', 'w') as f:
+    f.write(new_content)
+
+print("app.py 修复完成")
+EOF
+    else
+        log_warning "未找到需要替换的app.run语句"
+    fi
     
     chown -R $DEPLOY_USER:$DEPLOY_USER $INSTALL_DIR/app
     log_success "生产配置创建完成"
