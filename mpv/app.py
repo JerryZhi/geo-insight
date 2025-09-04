@@ -983,4 +983,5 @@ def upload_page():
                          brand_configs=brand_configs)
 
 if __name__ == '__main__':
+    # 在生产环境中，这里会被注释掉，使用 gunicorn 启动
     app.run(debug=True, host='0.0.0.0', port=5000)

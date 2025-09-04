@@ -40,12 +40,12 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # 配置变量 - 请在部署前修改这些值
-DOMAIN="your-domain.com"                    # 您的域名
-EMAIL="your-email@example.com"              # 用于SSL证书的邮箱
+DOMAIN="geo2.zhi.wtf"                    # 您的域名
+EMAIL="zhi@zhi.wtf"              # 用于SSL证书的邮箱
 SECRET_KEY="$(openssl rand -base64 32)"      # 自动生成的安全密钥
 DEPLOY_USER="geo-insight"                    # 应用运行用户
 INSTALL_DIR="/opt/geo-insight"              # 安装目录
-APP_PORT="5000"                             # 应用端口
+APP_PORT="5000"                       # 应用端口
 
 # 日志函数
 log_info() {
@@ -445,55 +445,46 @@ class Config:
     LOG_FILE = '$INSTALL_DIR/logs/app.log'
 EOF
 
-    # 创建WSGI入口
-    cat > $INSTALL_DIR/app/wsgi.py << EOF
+    # 创建WSGI入口文件
+    log_info "设置WSGI入口..."
+    
+    # 如果源码中已经有wsgi.py，直接使用，否则创建一个
+    if [[ -f "$INSTALL_DIR/app/wsgi.py" ]]; then
+        log_success "使用项目中的wsgi.py文件"
+    else
+        log_info "创建WSGI入口文件..."
+        cat > $INSTALL_DIR/app/wsgi.py << 'EOF'
 #!/usr/bin/env python3
 import sys
 import os
 
 # 添加应用目录到 Python 路径
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, current_dir)
 
 try:
     from app import app
-    print("Flask app imported successfully")
+    application = app
+    
+    if __name__ == "__main__":
+        port = int(os.environ.get('PORT', 5000))
+        app.run(host='127.0.0.1', port=port, debug=False)
+        
 except ImportError as e:
     print(f"Failed to import Flask app: {e}")
+    print(f"Current working directory: {os.getcwd()}")
+    print(f"Python path: {sys.path}")
     sys.exit(1)
-
-# 确保应用对象可用
-application = app
-
-if __name__ == "__main__":
-    port = int(os.environ.get('PORT', $APP_PORT))
-    app.run(host='127.0.0.1', port=port)
 EOF
+    fi
     
-    # 修改app.py中的调试设置，避免缩进错误
-    log_info "修复app.py中的生产环境配置..."
+    # 修改app.py中的调试设置
+    log_info "配置生产环境设置..."
     
-    # 更安全的替换方式，保持正确的缩进
+    # 简单的注释掉 app.run 行
     if grep -q "app.run(debug=True" $INSTALL_DIR/app/app.py; then
-        # 创建临时文件进行替换
-        python3 << 'EOF'
-import re
-
-# 读取文件
-with open('/opt/geo-insight/app/app.py', 'r') as f:
-    content = f.read()
-
-# 查找并替换app.run行，保持正确缩进
-pattern = r'(\s*)app\.run\(debug=True.*?\)'
-replacement = r'\1# Production: use gunicorn instead\n\1# app.run(debug=True, host="0.0.0.0", port=5000)'
-
-new_content = re.sub(pattern, replacement, content)
-
-# 写入文件
-with open('/opt/geo-insight/app/app.py', 'w') as f:
-    f.write(new_content)
-
-print("app.py 修复完成")
-EOF
+        sed -i 's/^    app\.run(debug=True, host=.*$/    # Production: use gunicorn instead\n    # &/' $INSTALL_DIR/app/app.py
+        log_success "app.py 生产环境配置完成"
     else
         log_warning "未找到需要替换的app.run语句"
     fi
