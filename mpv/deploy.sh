@@ -926,14 +926,74 @@ main() {
     echo "=========================================="
     echo
     
+    # 检查是否可以使用配置脚本
+    if [[ -f "configure.sh" && "$DOMAIN" == "your-domain.com" ]]; then
+        echo -e "${YELLOW}检测到未配置的默认设置${NC}"
+        echo -e "${BLUE}建议使用配置脚本来设置域名和邮箱${NC}"
+        echo
+        read -p "是否运行配置脚本？(Y/n): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
+            log_info "运行配置脚本..."
+            bash configure.sh
+            if [[ $? -eq 0 ]]; then
+                log_success "配置完成，重新启动部署脚本..."
+                exec bash deploy.sh
+            else
+                log_error "配置失败，继续使用默认配置"
+            fi
+        fi
+    fi
+    
     # 检查配置
     if [[ "$DOMAIN" == "your-domain.com" ]]; then
-        log_warning "请先修改脚本顶部的配置变量（域名、邮箱等）"
-        read -p "是否继续？(y/N): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            exit 1
+        log_warning "使用默认域名配置，建议修改脚本中的配置变量"
+        echo -e "${BLUE}配置选项:${NC}"
+        echo "1. 手动编辑 deploy.sh 修改 DOMAIN 和 EMAIL 变量"
+        if [[ -f "configure.sh" ]]; then
+            echo "2. 运行 'bash configure.sh' 使用配置向导"
         fi
+        echo "3. 继续使用默认配置（仅支持IP访问）"
+        echo
+        read -p "选择操作 (1-3) 或直接回车继续: " -n 1 -r
+        echo
+        
+        case $REPLY in
+            1)
+                log_info "请编辑 deploy.sh 文件，修改顶部的配置变量"
+                exit 0
+                ;;
+            2)
+                if [[ -f "configure.sh" ]]; then
+                    bash configure.sh && exec bash deploy.sh
+                else
+                    log_error "configure.sh 文件不存在"
+                fi
+                ;;
+            3|"")
+                log_warning "继续使用默认配置..."
+                ;;
+            *)
+                log_error "无效选择"
+                exit 1
+                ;;
+        esac
+    fi
+    
+    # 显示当前配置
+    echo -e "${BLUE}当前部署配置:${NC}"
+    echo "• 域名: $DOMAIN"
+    echo "• 邮箱: $EMAIL"
+    echo "• 应用用户: $DEPLOY_USER"
+    echo "• 安装目录: $INSTALL_DIR"
+    echo "• 应用端口: $APP_PORT"
+    echo
+    
+    read -p "确认配置无误，继续部署？(Y/n): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Nn]$ ]]; then
+        log_info "部署已取消"
+        exit 0
     fi
     
     # 执行部署步骤
