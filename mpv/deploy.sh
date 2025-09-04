@@ -4,10 +4,46 @@
 # GEO Insight MV# 更新系统包
 update_system() {
     log_info "更新系统包..."
-    apt update && apt upgrade -y
-    apt install -y curl wget git vim unzip software-properties-common build-essential cron
     
-    # 启动cron服务
+    # 确保apt在非交互模式下运行
+    export DEBIAN_FRONTEND=noninteractive
+    
+    # 修复可能损坏的包
+    log_info "修复包依赖..."
+    apt --fix-broken install -y
+    dpkg --configure -a
+    
+    # 更新包列表，重试机制
+    log_info "更新包列表..."
+    for i in {1..3}; do
+        if apt update; then
+            break
+        else
+            log_warning "更新失败，重试 $i/3..."
+            sleep 5
+        fi
+    done
+    
+    # 升级系统
+    log_info "升级系统包..."
+    apt upgrade -y
+    
+    # 安装基础工具
+    log_info "安装基础工具..."
+    apt install -y \
+        curl wget git vim nano unzip zip \
+        software-properties-common \
+        build-essential \
+        cron \
+        apt-transport-https \
+        ca-certificates \
+        gnupg \
+        lsb-release \
+        net-tools \
+        htop \
+        tree
+    
+    # 启动并启用cron服务
     systemctl start cron
     systemctl enable cron
     
@@ -19,6 +55,28 @@ update_system() {
 #########################################
 
 set -e  # 遇到错误立即退出
+
+# 创建日志目录
+LOG_DIR="/var/log/geo-insight-deploy"
+mkdir -p $LOG_DIR
+LOG_FILE="$LOG_DIR/deploy-$(date +%Y%m%d-%H%M%S).log"
+
+# 重定向输出到日志文件
+exec 1> >(tee -a $LOG_FILE)
+exec 2> >(tee -a $LOG_FILE >&2)
+
+# 错误处理函数
+handle_error() {
+    local exit_code=$?
+    local line_number=$1
+    log_error "脚本在第 $line_number 行发生错误，退出码: $exit_code"
+    log_error "详细日志已保存到: $LOG_FILE"
+    log_info "请检查日志文件并联系技术支持"
+    exit $exit_code
+}
+
+# 设置错误陷阱
+trap 'handle_error $LINENO' ERR
 
 # 颜色定义
 RED='\033[0;31m'
@@ -59,6 +117,62 @@ check_root() {
         log_info "请使用: sudo bash deploy.sh"
         exit 1
     fi
+}
+
+# 预检查系统环境
+pre_check() {
+    log_info "执行部署前预检查..."
+    
+    # 检查网络连接
+    log_info "检查网络连接..."
+    if ping -c 1 8.8.8.8 &> /dev/null; then
+        log_success "网络连接正常"
+    else
+        log_error "网络连接失败，请检查网络设置"
+        exit 1
+    fi
+    
+    # 检查磁盘空间 (至少需要2GB)
+    log_info "检查磁盘空间..."
+    AVAILABLE_SPACE=$(df / | awk 'NR==2 {print $4}')
+    REQUIRED_SPACE=2097152  # 2GB in KB
+    if [ "$AVAILABLE_SPACE" -gt "$REQUIRED_SPACE" ]; then
+        log_success "磁盘空间充足 ($(($AVAILABLE_SPACE/1024/1024))GB 可用)"
+    else
+        log_error "磁盘空间不足，至少需要2GB可用空间"
+        exit 1
+    fi
+    
+    # 检查内存
+    log_info "检查内存..."
+    TOTAL_MEM=$(free -m | awk 'NR==2{print $2}')
+    if [ "$TOTAL_MEM" -gt 512 ]; then
+        log_success "内存充足 (${TOTAL_MEM}MB)"
+    else
+        log_warning "内存较少 (${TOTAL_MEM}MB)，建议至少1GB"
+    fi
+    
+    # 检查必要端口是否被占用
+    log_info "检查端口占用情况..."
+    for port in 80 443 5000; do
+        if netstat -tlnp 2>/dev/null | grep -q ":$port "; then
+            log_warning "端口 $port 已被占用"
+            netstat -tlnp | grep ":$port "
+        else
+            log_success "端口 $port 可用"
+        fi
+    done
+    
+    # 检查当前目录是否包含应用文件
+    if [[ ! -f "app.py" ]]; then
+        log_error "未在当前目录找到app.py文件"
+        log_info "请确保在包含应用代码的目录中运行此脚本"
+        log_info "当前目录内容:"
+        ls -la
+        exit 1
+    fi
+    
+    log_success "预检查完成，系统满足部署条件"
 }
 
 # 检查系统版本
@@ -111,69 +225,143 @@ install_python() {
     
     # 获取系统信息
     source /etc/os-release
+    log_info "检测到系统: $PRETTY_NAME"
     
-    # 针对不同系统版本使用不同安装策略
-    if [[ "$ID" == "ubuntu" ]]; then
-        # Ubuntu系统
-        VERSION_ID_MAJOR=$(echo "$VERSION_ID" | cut -d'.' -f1)
-        if [ "$VERSION_ID_MAJOR" -ge 20 ]; then
-            # Ubuntu 20.04+ 可以直接安装python3.9
-            log_info "检测到Ubuntu $VERSION_ID，尝试直接安装Python 3.9..."
-            apt install -y python3.9 python3.9-pip python3.9-venv python3.9-dev python3.9-distutils 2>/dev/null || {
-                log_warning "直接安装失败，添加deadsnakes PPA..."
-                install_python_with_ppa
-            }
-        else
-            # 旧版Ubuntu需要PPA
-            log_info "检测到旧版Ubuntu $VERSION_ID，添加deadsnakes PPA..."
-            install_python_with_ppa
-        fi
-    elif [[ "$ID" == "debian" ]]; then
-        # Debian系统
-        VERSION_ID_MAJOR=$(echo "$VERSION_ID" | cut -d'.' -f1)
-        if [ "$VERSION_ID_MAJOR" -ge 11 ]; then
-            # Debian 11+ 可能有python3.9
-            log_info "检测到Debian $VERSION_ID，尝试直接安装Python 3.9..."
-            apt install -y python3.9 python3.9-pip python3.9-venv python3.9-dev python3.9-distutils 2>/dev/null || {
-                log_warning "直接安装失败，使用默认Python版本..."
-                install_default_python
-            }
-        else
-            log_info "检测到旧版Debian $VERSION_ID，使用默认Python版本..."
-            install_default_python
-        fi
+    # 根据系统版本选择最佳安装策略
+    if [[ "$ID" == "debian" ]]; then
+        install_python_debian
+    elif [[ "$ID" == "ubuntu" ]]; then
+        install_python_ubuntu
+    else
+        log_error "不支持的系统类型: $ID"
+        exit 1
     fi
     
-    # 设置默认Python版本（如果安装了3.9）
-    if command -v python3.9 &> /dev/null; then
-        update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
-        log_success "Python 3.9 安装完成"
+    # 验证Python安装
+    verify_python_installation
+    
+    # 创建python软链接（可选）
+    if ! command -v python &> /dev/null && command -v python3 &> /dev/null; then
+        log_info "创建python软链接..."
+        ln -sf /usr/bin/python3 /usr/bin/python
+    fi
+    
+    log_success "Python环境安装完成"
+}
+
+# Debian系统Python安装
+install_python_debian() {
+    VERSION_ID_MAJOR=$(echo "$VERSION_ID" | cut -d'.' -f1)
+    
+    if [ "$VERSION_ID_MAJOR" -ge 11 ]; then
+        # Debian 11+ 尝试安装Python 3.9+
+        log_info "Debian $VERSION_ID 尝试安装Python 3.9..."
+        
+        # 更新包列表
+        apt update
+        
+        # 尝试安装Python 3.9
+        if apt install -y python3.9 python3.9-pip python3.9-venv python3.9-dev python3.9-distutils 2>/dev/null; then
+            log_success "Python 3.9 安装成功"
+            update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
+        else
+            log_warning "Python 3.9 不可用，安装默认版本..."
+            install_default_python
+        fi
     else
-        log_success "Python 安装完成"
+        # 旧版Debian
+        log_info "旧版Debian $VERSION_ID，安装默认Python版本..."
+        install_default_python
+    fi
+}
+
+# Ubuntu系统Python安装
+install_python_ubuntu() {
+    VERSION_ID_MAJOR=$(echo "$VERSION_ID" | cut -d'.' -f1)
+    
+    if [ "$VERSION_ID_MAJOR" -ge 20 ]; then
+        # Ubuntu 20.04+ 直接安装
+        log_info "Ubuntu $VERSION_ID 直接安装Python 3.9..."
+        apt install -y python3.9 python3.9-pip python3.9-venv python3.9-dev python3.9-distutils || {
+            log_warning "直接安装失败，使用PPA..."
+            install_python_with_ppa
+        }
+        update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
+    else
+        # 旧版Ubuntu使用PPA
+        log_info "旧版Ubuntu $VERSION_ID，使用deadsnakes PPA..."
+        install_python_with_ppa
     fi
 }
 
 # 使用PPA安装Python
 install_python_with_ppa() {
+    log_info "添加deadsnakes PPA..."
     apt install -y software-properties-common
     add-apt-repository -y ppa:deadsnakes/ppa
     apt update
+    
+    # 安装Python 3.9
     apt install -y python3.9 python3.9-pip python3.9-venv python3.9-dev python3.9-distutils
+    
+    # 设置为默认Python3版本
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
 }
 
 # 安装默认Python版本
 install_default_python() {
-    log_warning "安装系统默认Python版本（可能不是3.9+）"
-    apt install -y python3 python3-pip python3-venv python3-dev
+    log_warning "安装系统默认Python版本"
     
-    # 检查版本是否满足要求
-    PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
+    # 安装Python基础包
+    apt install -y python3 python3-pip python3-venv python3-dev python3-setuptools
+    
+    # 检查版本
+    PYTHON_VERSION=$(python3 --version | cut -d' ' -f2)
+    log_info "已安装Python版本: $PYTHON_VERSION"
+    
+    # 检查版本是否满足最低要求
     MAJOR=$(echo "$PYTHON_VERSION" | cut -d'.' -f1)
     MINOR=$(echo "$PYTHON_VERSION" | cut -d'.' -f2)
-    if [ "$MAJOR" -lt 3 ] || ([ "$MAJOR" -eq 3 ] && [ "$MINOR" -lt 9 ]); then
-        log_error "Python版本 $PYTHON_VERSION 过低，建议升级系统或手动安装Python 3.9+"
-        log_error "应用可能无法正常运行"
+    if [ "$MAJOR" -lt 3 ] || ([ "$MAJOR" -eq 3 ] && [ "$MINOR" -lt 8 ]); then
+        log_error "Python版本 $PYTHON_VERSION 过低 (需要3.8+)"
+        log_error "建议升级系统或手动安装新版Python"
+        exit 1
     fi
+}
+
+# 验证Python安装
+verify_python_installation() {
+    log_info "验证Python安装..."
+    
+    # 检查python3命令
+    if ! command -v python3 &> /dev/null; then
+        log_error "Python3 安装失败"
+        exit 1
+    fi
+    
+    # 检查pip3命令
+    if ! command -v pip3 &> /dev/null; then
+        log_warning "pip3 不可用，尝试安装..."
+        
+        # 尝试安装pip
+        if command -v python3.9 &> /dev/null; then
+            curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
+        else
+            apt install -y python3-pip
+        fi
+    fi
+    
+    # 验证pip可用性
+    if command -v pip3 &> /dev/null; then
+        log_success "pip3 可用: $(pip3 --version)"
+    else
+        log_error "pip3 安装失败"
+        exit 1
+    fi
+    
+    # 升级pip
+    log_info "升级pip..."
+    python3 -m pip install --upgrade pip
 }
 
 # 安装Nginx
@@ -236,13 +424,41 @@ install_python_deps() {
     
     cd $INSTALL_DIR/app
     
-    # 创建虚拟环境
+    # 创建虚拟环境，使用更稳健的方法
+    log_info "创建Python虚拟环境..."
     sudo -u $DEPLOY_USER python3 -m venv venv
     
-    # 安装依赖
-    sudo -u $DEPLOY_USER bash -c "source venv/bin/activate && pip install --upgrade pip"
-    sudo -u $DEPLOY_USER bash -c "source venv/bin/activate && pip install -r requirements.txt"
+    # 确保虚拟环境创建成功
+    if [[ ! -f "$INSTALL_DIR/app/venv/bin/activate" ]]; then
+        log_error "虚拟环境创建失败"
+        exit 1
+    fi
+    
+    # 升级pip和安装基础工具
+    log_info "升级pip和安装基础工具..."
+    sudo -u $DEPLOY_USER bash -c "source venv/bin/activate && python -m pip install --upgrade pip setuptools wheel"
+    
+    # 安装依赖，使用超时和重试机制
+    log_info "安装项目依赖..."
+    if [[ -f "requirements.txt" ]]; then
+        # 尝试安装依赖，如果失败则使用镜像源
+        sudo -u $DEPLOY_USER bash -c "source venv/bin/activate && pip install -r requirements.txt --timeout 300" || {
+            log_warning "使用默认源安装失败，尝试使用清华镜像源..."
+            sudo -u $DEPLOY_USER bash -c "source venv/bin/activate && pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple/ --timeout 300"
+        }
+    else
+        log_error "未找到requirements.txt文件"
+        exit 1
+    fi
+    
+    # 安装gunicorn
+    log_info "安装gunicorn..."
     sudo -u $DEPLOY_USER bash -c "source venv/bin/activate && pip install gunicorn"
+    
+    # 验证关键包是否安装成功
+    log_info "验证依赖安装..."
+    sudo -u $DEPLOY_USER bash -c "source venv/bin/activate && python -c 'import flask; print(f\"Flask版本: {flask.__version__}\")'"
+    sudo -u $DEPLOY_USER bash -c "source venv/bin/activate && python -c 'import gunicorn; print(f\"Gunicorn版本: {gunicorn.__version__}\")'"
     
     log_success "Python依赖安装完成"
 }
@@ -298,16 +514,48 @@ init_database() {
     
     cd $INSTALL_DIR/app
     
-    # 运行初始化脚本
+    # 检查setup.py文件
     if [[ -f "setup.py" ]]; then
-        sudo -u $DEPLOY_USER bash -c "source venv/bin/activate && python setup.py"
+        log_info "运行数据库初始化脚本..."
+        sudo -u $DEPLOY_USER bash -c "source venv/bin/activate && python setup.py" || {
+            log_error "数据库初始化失败，请检查setup.py脚本"
+            log_info "尝试手动初始化..."
+            
+            # 尝试直接创建数据库
+            sudo -u $DEPLOY_USER bash -c "source venv/bin/activate && python -c \"
+import sqlite3
+import os
+db_path = 'geo_insight.db'
+if not os.path.exists(db_path):
+    conn = sqlite3.connect(db_path)
+    print('数据库文件已创建')
+    conn.close()
+else:
+    print('数据库文件已存在')
+\""
+        }
     else
-        log_warning "未找到setup.py，请手动初始化数据库"
+        log_warning "未找到setup.py，手动创建数据库文件..."
+        sudo -u $DEPLOY_USER touch geo_insight.db
     fi
     
-    # 设置权限
+    # 确保数据库文件存在
+    if [[ ! -f "$INSTALL_DIR/app/geo_insight.db" ]]; then
+        log_warning "数据库文件不存在，创建空数据库..."
+        sudo -u $DEPLOY_USER touch $INSTALL_DIR/app/geo_insight.db
+    fi
+    
+    # 设置数据库文件权限
     chmod 644 $INSTALL_DIR/app/geo_insight.db
     chown $DEPLOY_USER:$DEPLOY_USER $INSTALL_DIR/app/geo_insight.db
+    
+    # 验证数据库文件
+    if [[ -f "$INSTALL_DIR/app/geo_insight.db" ]]; then
+        log_success "数据库文件创建成功: $(ls -la $INSTALL_DIR/app/geo_insight.db)"
+    else
+        log_error "数据库文件创建失败"
+        exit 1
+    fi
     
     log_success "数据库初始化完成"
 }
@@ -560,11 +808,15 @@ conn.close()
 check_services() {
     log_info "检查服务状态..."
     
+    # 等待服务启动
+    sleep 5
+    
     # 检查Nginx
     if systemctl is-active --quiet nginx; then
         log_success "Nginx 运行正常"
     else
         log_error "Nginx 未运行"
+        systemctl status nginx --no-pager -l
     fi
     
     # 检查Supervisor
@@ -572,20 +824,43 @@ check_services() {
         log_success "Supervisor 运行正常"
     else
         log_error "Supervisor 未运行"
+        systemctl status supervisor --no-pager -l
     fi
     
-    # 检查应用
+    # 检查应用进程
     if supervisorctl status geo-insight | grep -q RUNNING; then
         log_success "GEO Insight 应用运行正常"
     else
         log_error "GEO Insight 应用未运行"
+        log_info "应用状态:"
+        supervisorctl status geo-insight
+        log_info "应用日志:"
+        tail -20 $INSTALL_DIR/logs/supervisor_error.log 2>/dev/null || echo "日志文件不存在"
     fi
     
-    # 检查端口
+    # 检查端口监听
     if netstat -tlnp | grep -q ":$APP_PORT"; then
         log_success "应用端口 $APP_PORT 监听正常"
     else
         log_error "应用端口 $APP_PORT 未监听"
+        log_info "当前监听的端口:"
+        netstat -tlnp | grep LISTEN
+    fi
+    
+    # 检查应用响应
+    log_info "测试应用响应..."
+    sleep 2
+    if curl -s -o /dev/null -w "%{http_code}" http://localhost:$APP_PORT/ | grep -q "200\|302\|404"; then
+        log_success "应用响应正常"
+    else
+        log_warning "应用可能未正常响应，请检查日志"
+    fi
+    
+    # 检查健康检查端点
+    if curl -s http://localhost/health 2>/dev/null | grep -q "healthy"; then
+        log_success "健康检查端点正常"
+    else
+        log_warning "健康检查端点未响应"
     fi
 }
 
@@ -598,28 +873,49 @@ show_deployment_info() {
     echo
     echo -e "${BLUE}部署信息:${NC}"
     echo "• 应用地址: http://$DOMAIN"
+    if [[ "$DOMAIN" == "your-domain.com" ]]; then
+        echo "• 本地访问: http://$(hostname -I | awk '{print $1}')"
+    fi
     echo "• 安装目录: $INSTALL_DIR"
     echo "• 应用用户: $DEPLOY_USER"
     echo "• 应用端口: $APP_PORT"
+    echo "• 部署日志: $LOG_FILE"
+    echo
+    echo -e "${BLUE}系统信息:${NC}"
+    echo "• 操作系统: $(cat /etc/os-release | grep PRETTY_NAME | cut -d'"' -f2)"
+    echo "• Python版本: $(python3 --version)"
+    echo "• 数据库: SQLite ($INSTALL_DIR/app/geo_insight.db)"
     echo
     echo -e "${BLUE}管理命令:${NC}"
     echo "• 查看应用状态: supervisorctl status geo-insight"
     echo "• 重启应用: supervisorctl restart geo-insight"
     echo "• 查看应用日志: tail -f $INSTALL_DIR/logs/supervisor_error.log"
     echo "• 查看Nginx状态: systemctl status nginx"
+    echo "• 查看部署日志: tail -f $LOG_FILE"
+    echo
+    echo -e "${BLUE}文件位置:${NC}"
+    echo "• 应用代码: $INSTALL_DIR/app/"
+    echo "• 配置文件: $INSTALL_DIR/app/config.py"
+    echo "• Nginx配置: /etc/nginx/sites-available/geo-insight"
+    echo "• Supervisor配置: /etc/supervisor/conf.d/geo-insight.conf"
     echo
     echo -e "${BLUE}下一步:${NC}"
     if [[ "$DOMAIN" == "your-domain.com" ]]; then
         echo "• 修改脚本中的域名配置，然后运行SSL安装"
+        echo "• 或直接访问 http://$(hostname -I | awk '{print $1}') 开始使用"
     else
         echo "• 访问 http://$DOMAIN 开始使用"
     fi
     echo "• 创建管理员账户"
     echo "• 配置API和品牌监测规则"
+    echo "• 定期备份数据库文件"
     echo
-    echo -e "${YELLOW}注意: 请保存以下信息${NC}"
+    echo -e "${YELLOW}重要信息 (请保存):${NC}"
     echo "• SECRET_KEY: $SECRET_KEY"
     echo "• 数据库文件: $INSTALL_DIR/app/geo_insight.db"
+    echo "• 部署日志: $LOG_FILE"
+    echo
+    echo -e "${GREEN}部署成功！应用已启动并运行。${NC}"
     echo
 }
 
@@ -642,6 +938,7 @@ main() {
     
     # 执行部署步骤
     check_root
+    pre_check
     check_system
     update_system
     install_python
