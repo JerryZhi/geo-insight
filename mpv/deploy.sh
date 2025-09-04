@@ -447,8 +447,22 @@ EOF
 
     # 创建WSGI入口
     cat > $INSTALL_DIR/app/wsgi.py << EOF
-from app import app
+#!/usr/bin/env python3
+import sys
 import os
+
+# 添加应用目录到 Python 路径
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+try:
+    from app import app
+    print("Flask app imported successfully")
+except ImportError as e:
+    print(f"Failed to import Flask app: {e}")
+    sys.exit(1)
+
+# 确保应用对象可用
+application = app
 
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', $APP_PORT))
@@ -556,13 +570,51 @@ EOF
     log_success "Gunicorn配置完成"
 }
 
+# 诊断应用问题
+diagnose_app() {
+    log_info "诊断应用问题..."
+    
+    cd $INSTALL_DIR/app
+    
+    # 检查 Python 模块导入
+    log_info "测试 Python 模块导入..."
+    sudo -u $DEPLOY_USER bash -c "source venv/bin/activate && python -c 'import sys; print(\"Python path:\", sys.path)'"
+    
+    # 测试 Flask 应用导入
+    log_info "测试 Flask 应用导入..."
+    sudo -u $DEPLOY_USER bash -c "source venv/bin/activate && python -c 'from app import app; print(\"Flask app imported successfully\")'" || {
+        log_error "Flask 应用导入失败"
+        return 1
+    }
+    
+    # 测试 WSGI 模块
+    log_info "测试 WSGI 模块..."
+    sudo -u $DEPLOY_USER bash -c "source venv/bin/activate && python -c 'import wsgi; print(\"WSGI module imported successfully\")'" || {
+        log_error "WSGI 模块导入失败"
+        return 1
+    }
+    
+    # 测试数据库连接
+    log_info "测试数据库连接..."
+    sudo -u $DEPLOY_USER bash -c "source venv/bin/activate && python -c 'import sqlite3; conn = sqlite3.connect(\"geo_insight.db\"); print(\"Database connection successful\"); conn.close()'" || {
+        log_error "数据库连接失败"
+        return 1
+    }
+    
+    # 检查文件权限
+    log_info "检查文件权限..."
+    ls -la $INSTALL_DIR/app/ | head -10
+    
+    log_success "应用诊断完成"
+}
+
 # 配置Supervisor
 configure_supervisor() {
     log_info "配置Supervisor..."
     
     cat > /etc/supervisor/conf.d/geo-insight.conf << EOF
 [program:geo-insight]
-command=$INSTALL_DIR/app/venv/bin/gunicorn -c $INSTALL_DIR/app/gunicorn.conf.py wsgi:app
+command=$INSTALL_DIR/app/venv/bin/gunicorn -c $INSTALL_DIR/app/gunicorn.conf.py wsgi:application
 directory=$INSTALL_DIR/app
 user=$DEPLOY_USER
 group=$DEPLOY_USER
@@ -573,11 +625,24 @@ killasgroup=true
 stderr_logfile=$INSTALL_DIR/logs/supervisor_error.log
 stdout_logfile=$INSTALL_DIR/logs/supervisor_out.log
 environment=PATH="$INSTALL_DIR/app/venv/bin",PYTHONPATH="$INSTALL_DIR/app"
+redirect_stderr=true
+stdout_logfile_maxbytes=50MB
+stderr_logfile_maxbytes=50MB
+startsecs=10
+startretries=3
 EOF
 
     # 重新加载配置
     supervisorctl reread
     supervisorctl update
+    
+    # 首先停止可能存在的进程
+    supervisorctl stop geo-insight 2>/dev/null || true
+    
+    # 等待一下再启动
+    sleep 2
+    
+    # 启动服务
     supervisorctl start geo-insight
     
     log_success "Supervisor配置完成"
@@ -964,6 +1029,10 @@ main() {
     create_config
     init_database
     configure_gunicorn
+    
+    # 诊断应用问题
+    diagnose_app
+    
     configure_supervisor
     configure_nginx
     configure_firewall
