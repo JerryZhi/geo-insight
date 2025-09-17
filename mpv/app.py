@@ -83,13 +83,13 @@ async def query_llm_api(session, prompt, api_config):
             data = {
                 'model': api_config.get('model', 'gpt-3.5-turbo'),
                 'messages': [{'role': 'user', 'content': prompt}],
-                'max_tokens': 500,
+                'max_tokens': 2000,  # 增加token上限以获取更完整的响应
                 'temperature': 0.7
             }
         elif 'claude' in api_config['endpoint'].lower() or 'anthropic' in api_config['endpoint'].lower():
             data = {
                 'model': api_config.get('model', 'claude-3-sonnet-20240229'),
-                'max_tokens': 500,
+                'max_tokens': 2000,  # 增加token上限以获取更完整的响应
                 'messages': [{'role': 'user', 'content': prompt}]
             }
         elif 'xeduapi' in api_config['endpoint'].lower():
@@ -97,7 +97,7 @@ async def query_llm_api(session, prompt, api_config):
             data = {
                 'model': api_config.get('model', 'gpt-3.5-turbo'),
                 'messages': [{'role': 'user', 'content': prompt}],
-                'max_tokens': 500,
+                'max_tokens': 2000,  # 增加token上限以获取更完整的响应
                 'temperature': 0.7,
                 'stream': False
             }
@@ -106,7 +106,7 @@ async def query_llm_api(session, prompt, api_config):
             data = {
                 'model': api_config.get('model', 'gpt-3.5-turbo'),
                 'messages': [{'role': 'user', 'content': prompt}],
-                'max_tokens': 500,
+                'max_tokens': 2000,  # 增加token上限以获取更完整的响应
                 'prompt': prompt  # 备用字段
             }
         
@@ -479,69 +479,137 @@ def delete_api_config(config_id):
     else:
         return jsonify({'success': False, 'message': '删除失败，该配置可能正在被使用'}), 400
 
-@app.route('/new_task')
+@app.route('/upload', methods=['GET', 'POST'])
 @login_required
-def new_task():
-    """创建新任务页面"""
-    api_configs = db.get_user_api_configs(g.current_user['id'])
-    brand_configs = db.get_user_brand_configs(g.current_user['id'])
+def upload_page():
+    """上传和配置页面 - 统一入口"""
+    if request.method == 'GET':
+        # 显示上传页面
+        api_configs = db.get_user_api_configs(g.current_user['id'])
+        brand_configs = db.get_user_brand_configs(g.current_user['id'])
+        recent_uploads = db.get_recent_uploads(g.current_user['id'], limit=3)
+        
+        return render_template('upload.html', 
+                             api_configs=api_configs,
+                             brand_configs=brand_configs,
+                             recent_uploads=recent_uploads)
     
-    return render_template('new_task.html', 
-                         api_configs=api_configs,
-                         brand_configs=brand_configs)
-
-@app.route('/upload', methods=['POST'])
-@login_required
-def upload_file():
-    try:
-        if 'file' not in request.files:
-            flash('请选择文件')
-            return redirect(url_for('new_task'))
-        
-        file = request.files['file']
-        if file.filename == '':
-            flash('未选择文件')
-            return redirect(url_for('new_task'))
-        
-        if file and allowed_file(file.filename):
-            filename = secure_filename(file.filename)
-            unique_filename = f"{uuid.uuid4()}_{filename}"
+    else:  # POST
+        # 处理文件上传或文本输入
+        try:
+            prompts = []
+            file_path = None
             
-            # 保存到用户专属目录
-            user_upload_dir, _ = create_user_directories(g.current_user['id'])
-            file_path = os.path.join(user_upload_dir, unique_filename)
+            # 检查是否是文本输入
+            prompts_text = request.form.get('prompts_text', '').strip()
+            if prompts_text:
+                # 处理文本输入的提示词
+                prompts = [line.strip() for line in prompts_text.split('\n') if line.strip()]
+                if not prompts:
+                    flash('未检测到有效的提示词')
+                    return redirect(url_for('upload_page'))
+                if len(prompts) > 1000:
+                    flash('提示词数量超出限制（最多1000条）')
+                    return redirect(url_for('upload_page'))
             
-            # 保存文件
-            file.save(file_path)
+            # 检查是否是重用历史文件
+            elif 'reuse_upload_id' in request.form:
+                upload_id = int(request.form.get('reuse_upload_id'))
+                uploads = db.get_recent_uploads(g.current_user['id'], limit=10)
+                upload_record = None
+                
+                for upload in uploads:
+                    if upload['id'] == upload_id:
+                        upload_record = upload
+                        break
+                
+                if not upload_record:
+                    flash('文件记录不存在或已过期')
+                    return redirect(url_for('upload_page'))
+                
+                # 检查文件是否还存在
+                user_upload_dir, _ = create_user_directories(g.current_user['id'])
+                file_path = os.path.join(user_upload_dir, upload_record['stored_filename'])
+                
+                if not os.path.exists(file_path):
+                    flash('文件已被删除，无法重新使用')
+                    return redirect(url_for('upload_page'))
+                
+                # 重新解析文件
+                prompts = parse_uploaded_file(file_path)
+                file_path = upload_record['stored_filename']  # 用于后续处理
+                
+                if not prompts:
+                    flash('文件解析失败')
+                    return redirect(url_for('upload_page'))
             
-            # 解析prompts
-            prompts = parse_uploaded_file(file_path)
-            
-            if not prompts:
-                flash('文件解析失败或文件为空')
-                return redirect(url_for('new_task'))
+            # 检查是否有新文件上传
+            elif 'file' in request.files:
+                file = request.files['file']
+                if file.filename == '':
+                    flash('未选择文件')
+                    return redirect(url_for('upload_page'))
+                
+                if file and allowed_file(file.filename):
+                    filename = secure_filename(file.filename)
+                    unique_filename = f"{uuid.uuid4()}_{filename}"
+                    
+                    # 保存到用户专属目录
+                    user_upload_dir, _ = create_user_directories(g.current_user['id'])
+                    file_path = os.path.join(user_upload_dir, unique_filename)
+                    
+                    # 保存文件
+                    file.save(file_path)
+                    
+                    # 获取文件大小并解析内容
+                    file_size = os.path.getsize(file_path)
+                    prompts = parse_uploaded_file(file_path)
+                    
+                    if not prompts:
+                        flash('文件解析失败或文件为空')
+                        return redirect(url_for('upload_page'))
+                    
+                    # 记录上传历史
+                    db.add_upload_history(
+                        user_id=g.current_user['id'],
+                        original_filename=file.filename,
+                        stored_filename=unique_filename,
+                        file_size=file_size,
+                        prompts_count=len(prompts)
+                    )
+                    
+                    # 清理旧记录，只保留最近10个
+                    db.cleanup_old_uploads(g.current_user['id'], keep_count=10)
+                    
+                    file_path = unique_filename  # 用于后续处理
+                else:
+                    flash('不支持的文件格式，请上传CSV或Excel文件')
+                    return redirect(url_for('upload_page'))
+            else:
+                flash('请选择文件或输入提示词')
+                return redirect(url_for('upload_page'))
             
             # 获取用户的API和品牌配置
             api_configs = db.get_user_api_configs(g.current_user['id'])
             brand_configs = db.get_user_brand_configs(g.current_user['id'])
+            recent_uploads = db.get_recent_uploads(g.current_user['id'], limit=3)
             
-            return render_template('configure.html', 
+            return render_template('upload.html', 
                                  prompts=prompts[:10],  # 只显示前10个预览
                                  total_prompts=len(prompts),
-                                 file_path=unique_filename,
+                                 file_path=file_path,
+                                 prompts_text=prompts_text if prompts_text else None,
                                  api_configs=api_configs,
-                                 brand_configs=brand_configs)
-        
-        flash('不支持的文件格式，请上传CSV或Excel文件')
-        return redirect(url_for('new_task'))
-        
-    except Exception as e:
-        # 添加详细的错误日志
-        print(f"上传文件错误: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        flash(f'文件上传失败: {str(e)}')
-        return redirect(url_for('new_task'))
+                                 brand_configs=brand_configs,
+                                 recent_uploads=recent_uploads,
+                                 show_config=True)  # 标记显示配置表单
+            
+        except Exception as e:
+            print(f"上传处理错误: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            flash(f'处理失败: {str(e)}')
+            return redirect(url_for('upload_page'))
 
 @app.route('/test_api', methods=['POST'])
 @login_required
@@ -600,34 +668,67 @@ def test_api():
 @login_required
 def run_analysis():
     try:
-        # 检查是否有文件上传
-        if 'file' in request.files:
-            # 处理文件上传
-            file = request.files['file']
-            if file.filename == '':
-                flash('未选择文件')
-                return redirect(url_for('upload_page'))
-            
-            if file and allowed_file(file.filename):
-                filename = secure_filename(file.filename)
-                unique_filename = f"{uuid.uuid4()}_{filename}"
-                
-                # 保存到用户专属目录
-                user_upload_dir, _ = create_user_directories(g.current_user['id'])
-                file_path = os.path.join(user_upload_dir, unique_filename)
-                
-                # 保存文件
-                file.save(file_path)
-                file_path = unique_filename  # 用于后续处理
-            else:
-                flash('不支持的文件格式，请上传CSV或Excel文件')
+        prompts = []
+        file_path = None
+        
+        # 检查是否是文本输入
+        prompts_text = request.form.get('prompts_text', '').strip()
+        if prompts_text:
+            # 处理文本输入的提示词
+            prompts = [line.strip() for line in prompts_text.split('\n') if line.strip()]
+            if not prompts:
+                flash('未检测到有效的提示词')
                 return redirect(url_for('upload_page'))
         else:
-            # 从表单获取已上传的文件路径
-            file_path = request.form.get('file_path')
-            if not file_path:
-                flash('请选择文件')
-                return redirect(url_for('upload_page'))
+            # 检查是否有文件上传
+            if 'file' in request.files:
+                # 处理文件上传
+                file = request.files['file']
+                if file.filename == '':
+                    flash('未选择文件')
+                    return redirect(url_for('upload_page'))
+                
+                if file and allowed_file(file.filename):
+                    filename = secure_filename(file.filename)
+                    unique_filename = f"{uuid.uuid4()}_{filename}"
+                    
+                    # 保存到用户专属目录
+                    user_upload_dir, _ = create_user_directories(g.current_user['id'])
+                    file_path = os.path.join(user_upload_dir, unique_filename)
+                    
+                    # 保存文件
+                    file.save(file_path)
+                    
+                    # 获取文件大小并记录上传历史
+                    file_size = os.path.getsize(file_path)
+                    prompts = parse_uploaded_file(file_path)
+                    
+                    if prompts:
+                        db.add_upload_history(
+                            user_id=g.current_user['id'],
+                            original_filename=file.filename,
+                            stored_filename=unique_filename,
+                            file_size=file_size,
+                            prompts_count=len(prompts)
+                        )
+                        db.cleanup_old_uploads(g.current_user['id'], keep_count=10)
+                    
+                    file_path = unique_filename  # 用于后续处理
+                else:
+                    flash('不支持的文件格式，请上传CSV或Excel文件')
+                    return redirect(url_for('upload_page'))
+            else:
+                # 从表单获取已上传的文件路径
+                file_path = request.form.get('file_path')
+                if file_path:
+                    # 重新解析文件
+                    user_upload_dir, _ = create_user_directories(g.current_user['id'])
+                    full_file_path = os.path.join(user_upload_dir, file_path)
+                    prompts = parse_uploaded_file(full_file_path)
+                
+                if not prompts:
+                    flash('请选择文件或输入提示词')
+                    return redirect(url_for('upload_page'))
         
         # 获取表单数据
         task_name = request.form.get('task_name', f'任务_{datetime.now().strftime("%Y%m%d_%H%M%S")}')
@@ -660,26 +761,25 @@ def run_analysis():
         request_delay = 0.5  # 固定延迟时间
         
         # 验证必填字段
-        if not file_path or not api_config:
-            flash('请选择文件和API配置')
+        if not prompts or not api_config:
+            flash('请输入提示词和选择API配置')
             return redirect(url_for('upload_page'))
         
         if not brands and not domains:
             flash('请至少输入一个品牌名称或域名进行监测')
             return redirect(url_for('upload_page'))
         
-        # 重新解析prompts（从用户目录）
-        user_upload_dir, user_results_dir = create_user_directories(g.current_user['id'])
-        full_file_path = os.path.join(user_upload_dir, file_path)
-        prompts = parse_uploaded_file(full_file_path)
-        
-        if not prompts:
-            flash('无法解析prompts文件')
-            return redirect(url_for('upload_page'))
+        # 如果是文件模式，验证文件路径
+        if file_path:
+            user_upload_dir, user_results_dir = create_user_directories(g.current_user['id'])
+            full_file_path = os.path.join(user_upload_dir, file_path)
+            if not os.path.exists(full_file_path):
+                flash('文件不存在，请重新上传')
+                return redirect(url_for('upload_page'))
         
         # 创建查询任务记录
         task_id = db.create_query_task(
-            g.current_user['id'], task_name, file_path, len(prompts), 
+            g.current_user['id'], task_name, file_path or 'text_input', len(prompts), 
             api_config_id, brand_config_id
         )
         
@@ -751,7 +851,7 @@ def download_results(result_id):
         for result in data['results']:
             row = {
                 'Prompt': result['prompt'],
-                'Response': result['response'][:200] + '...' if len(result['response']) > 200 else result['response'],
+                'Response': result['response'],  # 保留完整响应，不再截断
                 'Status': result['status'],
                 'Has_Brand_Mention': 1 if result['analysis']['has_brand_mention'] else 0,
                 'Has_Domain_Mention': 1 if result['analysis']['has_domain_mention'] else 0,
@@ -970,17 +1070,6 @@ def processing_page(task_id):
         traceback.print_exc()
         flash(f'加载等待页面失败: {str(e)}')
         return redirect(url_for('dashboard'))
-
-@app.route('/upload', methods=['GET'])
-@login_required
-def upload_page():
-    """上传和配置页面"""
-    api_configs = db.get_user_api_configs(g.current_user['id'])
-    brand_configs = db.get_user_brand_configs(g.current_user['id'])
-    
-    return render_template('upload.html', 
-                         api_configs=api_configs,
-                         brand_configs=brand_configs)
 
 if __name__ == '__main__':
     # 在生产环境中，这里会被注释掉，使用 gunicorn 启动

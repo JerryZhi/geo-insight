@@ -93,6 +93,20 @@ class Database:
             )
         ''')
         
+        # 文件上传历史表
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS upload_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                original_filename TEXT NOT NULL,
+                stored_filename TEXT NOT NULL,
+                file_size INTEGER,
+                prompts_count INTEGER,
+                upload_time TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+        ''')
+        
         conn.commit()
         conn.close()
     
@@ -508,16 +522,112 @@ class Database:
         return [dict(record) for record in history]
     
     def get_query_task(self, task_id, user_id):
-        """获取特定查询任务"""
+        """获取查询任务详情"""
         conn = self.get_connection()
         cursor = conn.cursor()
-        task = cursor.execute(
-            'SELECT * FROM query_history WHERE task_id = ? AND user_id = ?',
-            (task_id, user_id)
-        ).fetchone()
+        task = cursor.execute('''
+            SELECT * FROM query_history 
+            WHERE task_id = ? AND user_id = ?
+        ''', (task_id, user_id)).fetchone()
         conn.close()
         return dict(task) if task else None
 
+    # 文件上传历史管理
+    def save_upload_history(self, user_id, original_filename, stored_filename, file_size, prompts_count):
+        """保存文件上传历史记录"""
+        upload_time = datetime.now().isoformat()
+        
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO upload_history (user_id, original_filename, stored_filename, file_size, prompts_count, upload_time)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (user_id, original_filename, stored_filename, file_size, prompts_count, upload_time))
+        
+        conn.commit()
+        conn.close()
+    
+    def get_user_upload_history(self, user_id, limit=50):
+        """获取用户的文件上传历史记录"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        history = cursor.execute('''
+            SELECT * FROM upload_history
+            WHERE user_id = ?
+            ORDER BY upload_time DESC
+            LIMIT ?
+        ''', (user_id, limit)).fetchall()
+        conn.close()
+        return [dict(record) for record in history]
+    
+    def delete_upload_record(self, record_id, user_id):
+        """删除文件上传记录"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            DELETE FROM upload_history
+            WHERE id = ? AND user_id = ?
+        ''', (record_id, user_id))
+        conn.commit()
+        conn.close()
+    
+    def clear_upload_history(self, user_id):
+        """清空用户的文件上传历史记录"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            DELETE FROM upload_history
+            WHERE user_id = ?
+        ''', (user_id,))
+        conn.commit()
+        conn.close()
+    
+    def add_upload_history(self, user_id, original_filename, stored_filename, file_size, prompts_count):
+        """添加文件上传历史记录"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT INTO upload_history 
+            (user_id, original_filename, stored_filename, file_size, prompts_count, upload_time)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (user_id, original_filename, stored_filename, file_size, prompts_count, datetime.now().isoformat()))
+        
+        conn.commit()
+        conn.close()
+    
+    def get_recent_uploads(self, user_id, limit=3):
+        """获取用户最近上传的文件记录"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        uploads = cursor.execute('''
+            SELECT * FROM upload_history 
+            WHERE user_id = ?
+            ORDER BY upload_time DESC
+            LIMIT ?
+        ''', (user_id, limit)).fetchall()
+        
+        conn.close()
+        return [dict(record) for record in uploads]
+    
+    def cleanup_old_uploads(self, user_id, keep_count=10):
+        """清理用户旧的上传记录，只保留最近的记录"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            DELETE FROM upload_history 
+            WHERE user_id = ? AND id NOT IN (
+                SELECT id FROM upload_history 
+                WHERE user_id = ?
+                ORDER BY upload_time DESC
+                LIMIT ?
+            )
+        ''', (user_id, user_id, keep_count))
+        
+        conn.commit()
+        conn.close()
 
 # 创建全局数据库实例
 db = Database()

@@ -319,7 +319,14 @@
                             </td>
                             <td>
                                 <div class="response-text">
-                                    {{ result.response[:200] }}{% if result.response|length > 200 %}...{% endif %}
+                                    {{ result.response[:200] }}{% if result.response|length > 200 %}
+                                        <span class="text-muted">...</span>
+                                        <button type="button" class="btn btn-sm btn-outline-primary ms-2" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#detailModal{{ loop.index }}">
+                                            查看完整内容
+                                        </button>
+                                    {% endif %}
                                 </div>
                             </td>
                             <td>

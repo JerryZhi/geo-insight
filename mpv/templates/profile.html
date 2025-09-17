@@ -8,26 +8,149 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <style>
+        body {
+            background-color: #f8f9fa;
+            color: #333;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
         .navbar-brand {
             font-weight: bold;
             color: #667eea !important;
         }
+        
         .card {
             border-radius: 15px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+            border: none;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+        
         .btn-primary {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             border: none;
             border-radius: 25px;
+            padding: 8px 20px;
+            transition: all 0.3s ease;
         }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-outline-primary {
+            color: #667eea;
+            border-color: #667eea;
+            border-radius: 25px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-outline-primary:hover {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-color: transparent;
+        }
+        
+        .btn-warning {
+            background: linear-gradient(135deg, #ff9a44 0%, #fc6076 100%);
+            border: none;
+            border-radius: 25px;
+        }
+        
+        .btn-outline-warning {
+            color: #ff9a44;
+            border-color: #ff9a44;
+            border-radius: 25px;
+        }
+        
+        .btn-outline-warning:hover {
+            background: linear-gradient(135deg, #ff9a44 0%, #fc6076 100%);
+            border-color: transparent;
+            color: white;
+        }
+        
         .form-control, .form-select {
             border-radius: 10px;
+            padding: 10px 15px;
+            border: 1px solid #e0e0e0;
+            box-shadow: none;
+            transition: all 0.3s ease;
         }
+        
+        .form-control:focus, .form-select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.25rem rgba(102, 126, 234, 0.25);
+        }
+        
         .profile-header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border-radius: 15px 15px 0 0;
+            padding: 2rem;
+        }
+        
+        .nav-tabs {
+            border-bottom: none;
+            margin-bottom: 2rem;
+        }
+        
+        .nav-tabs .nav-link {
+            border: none;
+            color: #6c757d;
+            padding: 10px 20px;
+            border-radius: 30px;
+            margin-right: 10px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-tabs .nav-link:hover {
+            color: #667eea;
+            background-color: rgba(102, 126, 234, 0.1);
+        }
+        
+        .nav-tabs .nav-link.active {
+            color: white;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .badge {
+            padding: 6px 12px;
+            border-radius: 30px;
+            font-weight: 500;
+            margin-bottom: 5px;
+        }
+        
+        .badge.bg-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        }
+        
+        .badge.bg-success {
+            background: linear-gradient(135deg, #56ab2f 0%, #a8e063 100%) !important;
+        }
+        
+        .badge.bg-warning {
+            background: linear-gradient(135deg, #ff9a44 0%, #fc6076 100%) !important;
+            color: white;
+        }
+        
+        .empty-state {
+            padding: 3rem;
+            text-align: center;
+        }
+        
+        .empty-state-icon {
+            font-size: 4rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 1rem;
         }
     </style>
 </head>
@@ -49,7 +172,7 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('new_task') }}">
+                        <a class="nav-link" href="{{ url_for('upload_page') }}">
                             <i class="bi bi-plus-circle"></i> 新建任务
                         </a>
                     </li>
@@ -104,18 +227,26 @@
             <div class="col-lg-10 mx-auto">
                 <!-- 用户信息 -->
                 <div class="card mb-4">
-                    <div class="profile-header p-4">
+                    <div class="profile-header">
                         <div class="d-flex align-items-center">
-                            <div class="bg-white rounded-circle p-3 me-3">
-                                <i class="bi bi-person-fill text-primary" style="font-size: 2rem;"></i>
+                            <div class="bg-white rounded-circle p-3 me-4 shadow">
+                                <i class="bi bi-person-fill text-primary" style="font-size: 2.5rem;"></i>
                             </div>
                             <div>
-                                <h3 class="mb-1">{{ user.username }}</h3>
+                                <h3 class="mb-1 fw-bold">{{ user.username }}</h3>
                                 <p class="mb-1">{{ user.email }}</p>
-                                <small>注册时间：{{ user.created_at[:10] }}</small>
-                                {% if user.last_login %}
-                                <br><small>最后登录：{{ user.last_login[:19].replace('T', ' ') }}</small>
-                                {% endif %}
+                                <div class="d-flex align-items-center mt-2">
+                                    <span class="badge bg-light text-dark me-2">
+                                        <i class="bi bi-calendar-check me-1"></i>
+                                        注册于 {{ user.created_at[:10] }}
+                                    </span>
+                                    {% if user.last_login %}
+                                    <span class="badge bg-light text-dark">
+                                        <i class="bi bi-clock me-1"></i>
+                                        最后登录 {{ user.last_login[:19].replace('T', ' ') }}
+                                    </span>
+                                    {% endif %}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -148,34 +279,41 @@
                             <div class="col-md-8">
                                 <div class="card">
                                     <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                                        <h5 class="mb-0">API配置管理</h5>
+                                        <h5 class="mb-0">
+                                            <i class="bi bi-key me-2"></i>API配置管理
+                                        </h5>
                                         <a href="{{ url_for('api_configs') }}" class="btn btn-primary btn-sm">
-                                            <i class="bi bi-plus"></i> 添加配置
+                                            <i class="bi bi-plus me-1"></i> 添加配置
                                         </a>
                                     </div>
                                     <div class="card-body">
                                         {% if api_configs %}
                                             {% for config in api_configs %}
-                                                <div class="border rounded p-3 mb-3 {% if config.is_default %}border-primary{% endif %}">
+                                                <div class="border rounded p-3 mb-3 {% if config.is_default %}border-primary{% endif %} shadow-sm">
                                                     <div class="d-flex justify-content-between align-items-start">
                                                         <div>
-                                                            <h6 class="mb-1">
+                                                            <h6 class="mb-2 fw-bold">
                                                                 {{ config.name }}
                                                                 {% if config.is_default %}
                                                                     <span class="badge bg-primary ms-2">默认</span>
                                                                 {% endif %}
                                                             </h6>
-                                                            <p class="text-muted mb-1">{{ config.endpoint }}</p>
+                                                            <p class="text-muted mb-1 small">
+                                                                <i class="bi bi-link-45deg me-1"></i> {{ config.endpoint }}
+                                                            </p>
                                                             {% if config.model %}
-                                                                <p class="text-muted mb-1">模型：{{ config.model }}</p>
+                                                                <p class="text-muted mb-1 small">
+                                                                    <i class="bi bi-cpu me-1"></i> 模型：{{ config.model }}
+                                                                </p>
                                                             {% endif %}
                                                             <small class="text-muted">
-                                                                创建时间：{{ config.created_at[:19].replace('T', ' ') }}
+                                                                <i class="bi bi-calendar2 me-1"></i> 创建于 {{ config.created_at[:19].replace('T', ' ') }}
                                                             </small>
                                                         </div>
                                                         <div class="text-end">
                                                             <button class="btn btn-sm btn-outline-primary test-api-btn" 
-                                                                    data-config-id="{{ config.id }}">
+                                                                    data-config-id="{{ config.id }}" title="测试API连接"
+                                                                    style="border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; padding: 0;">
                                                                 <i class="bi bi-check-circle"></i>
                                                             </button>
                                                         </div>
@@ -183,11 +321,12 @@
                                                 </div>
                                             {% endfor %}
                                         {% else %}
-                                            <div class="text-center py-4">
-                                                <i class="bi bi-key" style="font-size: 3rem; color: #ccc;"></i>
-                                                <h6 class="mt-3 text-muted">还没有API配置</h6>
+                                            <div class="empty-state">
+                                                <i class="bi bi-key-fill" style="font-size: 4rem; color: #667eea;"></i>
+                                                <h5 class="mt-3">还没有API配置</h5>
+                                                <p class="text-muted mb-4">添加API配置以开始使用GEO Insight的功能</p>
                                                 <a href="{{ url_for('api_configs') }}" class="btn btn-primary">
-                                                    <i class="bi bi-plus"></i> 添加配置
+                                                    <i class="bi bi-plus-circle me-2"></i> 添加API配置
                                                 </a>
                                             </div>
                                         {% endif %}
@@ -197,7 +336,9 @@
                             <div class="col-md-4">
                                 <div class="card">
                                     <div class="card-header bg-light">
-                                        <h6 class="mb-0">使用说明</h6>
+                                        <h6 class="mb-0">
+                                    <i class="bi bi-info-circle me-2"></i>使用说明
+                                </h6>
                                     </div>
                                     <div class="card-body">
                                         <h6>支持的API类型：</h6>
@@ -220,54 +361,62 @@
                     <div class="tab-pane fade" id="brands" role="tabpanel">
                         <div class="card">
                             <div class="card-header bg-light">
-                                <h5 class="mb-0">品牌配置历史</h5>
+                                <h5 class="mb-0">
+                                    <i class="bi bi-tag me-2"></i>品牌配置历史
+                                </h5>
                             </div>
                             <div class="card-body">
                                 {% if brand_configs %}
                                     {% for config in brand_configs %}
-                                        <div class="border rounded p-3 mb-3">
+                                        <div class="border rounded p-4 mb-3 shadow-sm" style="transition: all 0.3s ease;">
                                             <div class="row">
-                                                <div class="col-md-6">
-                                                    <h6>监测品牌</h6>
+                                                <div class="col-md-6 mb-3">
+                                                    <h6 class="fw-bold">
+                                                        <i class="bi bi-award me-2"></i>监测品牌
+                                                    </h6>
                                                     {% if config.brand_names %}
                                                         {% for brand in config.brand_names %}
-                                                            <span class="badge bg-primary me-1">{{ brand }}</span>
+                                                            <span class="badge bg-primary me-2 mb-2">{{ brand }}</span>
                                                         {% endfor %}
                                                     {% endif %}
                                                 </div>
-                                                <div class="col-md-6">
-                                                    <h6>网站域名</h6>
+                                                <div class="col-md-6 mb-3">
+                                                    <h6 class="fw-bold">
+                                                        <i class="bi bi-globe me-2"></i>网站域名
+                                                    </h6>
                                                     {% if config.website_domains %}
                                                         {% for domain in config.website_domains %}
-                                                            <span class="badge bg-success me-1">{{ domain }}</span>
+                                                            <span class="badge bg-success me-2 mb-2">{{ domain }}</span>
                                                         {% endfor %}
                                                     {% else %}
-                                                        <span class="text-muted">无</span>
+                                                        <span class="text-muted">未设置</span>
                                                     {% endif %}
                                                 </div>
                                             </div>
                                             {% if config.competitors %}
-                                                <div class="mt-2">
-                                                    <h6>竞争对手</h6>
+                                                <div class="mt-2 mb-3">
+                                                    <h6 class="fw-bold">
+                                                        <i class="bi bi-people me-2"></i>竞争对手
+                                                    </h6>
                                                     {% for competitor in config.competitors %}
-                                                        <span class="badge bg-warning me-1">{{ competitor }}</span>
+                                                        <span class="badge bg-warning me-2 mb-2">{{ competitor }}</span>
                                                     {% endfor %}
                                                 </div>
                                             {% endif %}
-                                            <div class="mt-2">
+                                            <div class="mt-3 pt-2 border-top">
                                                 <small class="text-muted">
-                                                    创建时间：{{ config.created_at[:19].replace('T', ' ') }}
+                                                    <i class="bi bi-calendar2 me-1"></i> 创建于 {{ config.created_at[:19].replace('T', ' ') }}
                                                 </small>
                                             </div>
                                         </div>
                                     {% endfor %}
                                 {% else %}
-                                    <div class="text-center py-4">
-                                        <i class="bi bi-tag" style="font-size: 3rem; color: #ccc;"></i>
-                                        <h6 class="mt-3 text-muted">还没有品牌配置</h6>
-                                        <p class="text-muted">创建任务时会自动保存品牌配置</p>
-                                        <a href="{{ url_for('new_task') }}" class="btn btn-primary">
-                                            <i class="bi bi-plus"></i> 创建任务
+                                    <div class="empty-state">
+                                        <i class="bi bi-tag-fill" style="font-size: 4rem; color: #667eea;"></i>
+                                        <h5 class="mt-3">还没有品牌配置</h5>
+                                        <p class="text-muted mb-4">创建任务时会自动保存品牌配置</p>
+                                        <a href="{{ url_for('upload_page') }}" class="btn btn-primary">
+                                            <i class="bi bi-plus-circle me-2"></i> 创建新任务
                                         </a>
                                     </div>
                                 {% endif %}
@@ -281,32 +430,46 @@
                             <div class="col-md-8">
                                 <div class="card">
                                     <div class="card-header bg-light">
-                                        <h5 class="mb-0">账户信息</h5>
+                                        <h5 class="mb-0">
+                                    <i class="bi bi-person me-2"></i>账户信息
+                                </h5>
                                     </div>
                                     <div class="card-body">
                                         <form>
                                             <div class="mb-3">
                                                 <label for="username" class="form-label">用户名</label>
-                                                <input type="text" class="form-control" id="username" 
-                                                       value="{{ user.username }}" readonly>
+                                                <div class="input-group">
+                                                    <span class="input-group-text"><i class="bi bi-person"></i></span>
+                                                    <input type="text" class="form-control" id="username" 
+                                                        value="{{ user.username }}" readonly>
+                                                </div>
                                                 <div class="form-text">用户名暂不支持修改</div>
                                             </div>
                                             <div class="mb-3">
                                                 <label for="email" class="form-label">邮箱</label>
-                                                <input type="email" class="form-control" id="email" 
-                                                       value="{{ user.email }}" readonly>
+                                                <div class="input-group">
+                                                    <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                                                    <input type="email" class="form-control" id="email" 
+                                                        value="{{ user.email }}" readonly>
+                                                </div>
                                                 <div class="form-text">邮箱暂不支持修改</div>
                                             </div>
                                             <div class="mb-3">
                                                 <label for="created_at" class="form-label">注册时间</label>
-                                                <input type="text" class="form-control" id="created_at" 
-                                                       value="{{ user.created_at[:19].replace('T', ' ') }}" readonly>
+                                                <div class="input-group">
+                                                    <span class="input-group-text"><i class="bi bi-calendar-check"></i></span>
+                                                    <input type="text" class="form-control" id="created_at" 
+                                                        value="{{ user.created_at[:19].replace('T', ' ') }}" readonly>
+                                                </div>
                                             </div>
                                             {% if user.last_login %}
                                             <div class="mb-3">
                                                 <label for="last_login" class="form-label">最后登录</label>
-                                                <input type="text" class="form-control" id="last_login" 
-                                                       value="{{ user.last_login[:19].replace('T', ' ') }}" readonly>
+                                                <div class="input-group">
+                                                    <span class="input-group-text"><i class="bi bi-clock-history"></i></span>
+                                                    <input type="text" class="form-control" id="last_login" 
+                                                        value="{{ user.last_login[:19].replace('T', ' ') }}" readonly>
+                                                </div>
                                             </div>
                                             {% endif %}
                                         </form>
@@ -316,24 +479,26 @@
                             <div class="col-md-4">
                                 <div class="card">
                                     <div class="card-header bg-light">
-                                        <h6 class="mb-0">账户操作</h6>
+                                        <h6 class="mb-0">
+                                    <i class="bi bi-tools me-2"></i>账户操作
+                                </h6>
                                     </div>
                                     <div class="card-body">
-                                        <div class="d-grid gap-2">
+                                        <div class="d-grid gap-3">
                                             <button class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#changePasswordModal">
-                                                <i class="bi bi-lock"></i> 修改密码
+                                                <i class="bi bi-lock-fill me-2"></i> 修改密码
                                             </button>
                                             <button class="btn btn-outline-info" disabled>
-                                                <i class="bi bi-download"></i> 导出数据
+                                                <i class="bi bi-download me-2"></i> 导出数据
                                             </button>
                                             <hr>
                                             <button class="btn btn-outline-danger" disabled>
-                                                <i class="bi bi-trash"></i> 删除账户
+                                                <i class="bi bi-trash me-2"></i> 删除账户
                                             </button>
                                         </div>
                                         <div class="mt-3">
                                             <small class="text-muted">
-                                                <i class="bi bi-info-circle"></i>
+                                                <i class="bi bi-info-circle me-1"></i>
                                                 数据导出和账户删除功能将在未来版本中提供
                                             </small>
                                         </div>
@@ -346,6 +511,19 @@
             </div>
         </div>
     </div>
+
+    <footer class="bg-light py-4 mt-5 border-top">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6 text-center text-md-start">
+                    <p class="mb-0 text-muted">&copy; 2025 GEO Insight. 品牌监测工具</p>
+                </div>
+                <div class="col-md-6 text-center text-md-end">
+                    <p class="mb-0 text-muted">版本 1.0</p>
+                </div>
+            </div>
+        </div>
+    </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
@@ -395,33 +573,42 @@
     <!-- 修改密码模态框 -->
     <div class="modal fade" id="changePasswordModal" tabindex="-1">
         <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
+            <div class="modal-content" style="border-radius: 15px; border: none;">
+                <div class="modal-header" style="border-radius: 15px 15px 0 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
                     <h5 class="modal-title">
-                        <i class="bi bi-lock"></i> 修改密码
+                        <i class="bi bi-lock me-2"></i> 修改密码
                     </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <form method="POST" action="{{ url_for('change_password') }}">
                     <div class="modal-body">
                         <div class="mb-3">
                             <label for="current_password" class="form-label">当前密码 *</label>
-                            <input type="password" class="form-control" id="current_password" name="current_password" required>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-key"></i></span>
+                                <input type="password" class="form-control" id="current_password" name="current_password" required>
+                            </div>
                         </div>
                         <div class="mb-3">
                             <label for="new_password" class="form-label">新密码 *</label>
-                            <input type="password" class="form-control" id="new_password" name="new_password" minlength="6" required>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                                <input type="password" class="form-control" id="new_password" name="new_password" minlength="6" required>
+                            </div>
                             <div class="form-text">密码长度至少6位</div>
                         </div>
                         <div class="mb-3">
                             <label for="confirm_password" class="form-label">确认新密码 *</label>
-                            <input type="password" class="form-control" id="confirm_password" name="confirm_password" minlength="6" required>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-lock-fill"></i></span>
+                                <input type="password" class="form-control" id="confirm_password" name="confirm_password" minlength="6" required>
+                            </div>
                         </div>
                     </div>
-                    <div class="modal-footer">
+                    <div class="modal-footer" style="border-top: none;">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
                         <button type="submit" class="btn btn-warning">
-                            <i class="bi bi-check"></i> 确认修改
+                            <i class="bi bi-check me-2"></i> 确认修改
                         </button>
                     </div>
                 </form>
@@ -458,6 +645,27 @@
                 confirmPasswordInput.classList.remove('is-invalid');
                 confirmPasswordInput.setCustomValidity('');
             });
+            
+            // 持久保存标签页状态
+            const triggerTabList = document.querySelectorAll('#profileTabs button');
+            triggerTabList.forEach(triggerEl => {
+                const tabTrigger = new bootstrap.Tab(triggerEl);
+                triggerEl.addEventListener('click', event => {
+                    event.preventDefault();
+                    localStorage.setItem('activeProfileTab', triggerEl.getAttribute('id'));
+                    tabTrigger.show();
+                });
+            });
+
+            // 恢复上次访问的标签页
+            const activeTabId = localStorage.getItem('activeProfileTab');
+            if (activeTabId) {
+                const activeTab = document.querySelector('#' + activeTabId);
+                if (activeTab) {
+                    const tab = new bootstrap.Tab(activeTab);
+                    tab.show();
+                }
+            }
         });
     </script>
 </body>

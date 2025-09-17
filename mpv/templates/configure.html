@@ -86,7 +86,12 @@
                 <!-- 配置表单 -->
                 <div class="col-lg-8">
                     <form method="POST" action="/run_analysis">
+                        {% if file_path %}
                         <input type="hidden" name="file_path" value="{{ file_path }}">
+                        {% endif %}
+                        {% if prompts_text %}
+                        <input type="hidden" name="prompts_text" value="{{ prompts_text }}">
+                        {% endif %}
                         
                         <!-- 品牌监测配置 -->
                         <div class="card mb-4">

@@ -58,6 +58,7 @@
         }
         .recent-file-card {
             transition: all 0.3s;
+            cursor: pointer;
         }
         .recent-file-card:hover {
             transform: translateY(-2px);
@@ -68,6 +69,34 @@
         }
         .input-section.active {
             display: block;
+        }
+        .step-number {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        .config-option {
+            padding: 15px;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 10px;
+        }
+        .config-option:hover {
+            border-color: #667eea;
+            background-color: #f8f9ff;
+        }
+        .config-option.selected {
+            border-color: #667eea;
+            background-color: #f0f4ff;
         }
     </style>
 </head>
@@ -126,7 +155,7 @@
                 <!-- 页面标题 -->
                 <div class="text-center mb-4">
                     <h2><i class="bi bi-plus-circle"></i> 创建新的品牌监测任务</h2>
-                    <p class="text-muted">选择输入方式，开始品牌监测分析</p>
+                    <p class="text-muted">选择输入方式，配置监测参数，开始分析</p>
                 </div>
 
                 <!-- 消息提示 -->
@@ -151,7 +180,7 @@
                         <div class="row">
                             {% for upload in recent_uploads %}
                             <div class="col-md-4 mb-3">
-                                <div class="card recent-file-card border-secondary">
+                                <div class="card recent-file-card border-secondary" onclick="reuseFile({{ upload.id }}, '{{ upload.original_filename }}', {{ upload.prompts_count }})">
                                     <div class="card-body p-3">
                                         <h6 class="card-title text-truncate" title="{{ upload.original_filename }}">
                                             <i class="bi bi-file-earmark-text text-primary"></i> {{ upload.original_filename }}
@@ -160,12 +189,9 @@
                                             <i class="bi bi-list-ol"></i> {{ upload.prompts_count }} 条提示词<br>
                                             <i class="bi bi-calendar3"></i> {{ upload.upload_time[:16].replace('T', ' ') }}
                                         </p>
-                                        <form method="post" action="{{ url_for('upload_page') }}" class="d-inline w-100">
-                                            <input type="hidden" name="reuse_upload_id" value="{{ upload.id }}">
-                                            <button type="submit" class="btn btn-outline-primary btn-sm w-100">
-                                                <i class="bi bi-arrow-clockwise"></i> 重新使用
-                                            </button>
-                                        </form>
+                                        <button type="button" class="btn btn-outline-primary btn-sm w-100">
+                                            <i class="bi bi-arrow-clockwise"></i> 重新使用
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -206,21 +232,22 @@
                     </div>
                 </div>
 
-                <!-- 文件上传区域 -->
-                <div class="card input-section" id="fileSection">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0">
-                            <i class="bi bi-cloud-upload"></i> 上传Prompts文件
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <form action="{{ url_for('upload_page') }}" method="post" enctype="multipart/form-data" id="fileForm">
+                <form action="{{ url_for('run_analysis') }}" method="post" enctype="multipart/form-data" id="analysisForm">
+                    <!-- 文件上传区域 -->
+                    <div class="card input-section" id="fileSection">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">
+                                <span class="step-number">1</span>
+                                上传Prompts文件
+                            </h5>
+                        </div>
+                        <div class="card-body">
                             <div class="upload-area" id="uploadArea">
                                 <i class="bi bi-cloud-upload text-muted" style="font-size: 3rem;"></i>
                                 <h5 class="mt-3">拖拽文件到这里或点击选择</h5>
                                 <p class="text-muted">支持 CSV 和 Excel 格式文件，最多1000条提示词</p>
                                 <input type="file" class="form-control d-none" id="fileInput" name="file" 
-                                       accept=".csv,.xlsx,.xls" required>
+                                       accept=".csv,.xlsx,.xls">
                                 <button type="button" class="btn btn-primary" id="selectFileBtn">
                                     <i class="bi bi-folder-open"></i> 选择文件
                                 </button>
@@ -230,60 +257,54 @@
                                     <i class="bi bi-check-circle"></i>
                                     已选择文件：<span id="fileName"></span>
                                 </div>
-                                <div class="d-grid mt-3">
-                                    <button type="submit" class="btn btn-primary">
-                                        <i class="bi bi-arrow-right"></i> 继续配置
-                                    </button>
-                                </div>
                             </div>
-                        </form>
-
-                        <!-- 文件格式说明 -->
-                        <div class="mt-4 pt-4 border-top">
-                            <h6><i class="bi bi-info-circle"></i> 文件格式说明</h6>
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="card bg-light">
-                                        <div class="card-body">
-                                            <h6 class="card-title">CSV 格式示例</h6>
-                                            <pre class="small mb-0">prompt
+                            
+                            <!-- 文件格式说明 -->
+                            <div class="mt-4 pt-4 border-top">
+                                <h6><i class="bi bi-info-circle"></i> 文件格式说明</h6>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="card bg-light">
+                                            <div class="card-body">
+                                                <h6 class="card-title">CSV 格式示例</h6>
+                                                <pre class="small mb-0">prompt
 "推荐一些好用的项目管理工具"
 "什么是最佳的云服务提供商"
 "如何选择数据库系统"</pre>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="card bg-light">
-                                        <div class="card-body">
-                                            <h6 class="card-title">Excel 格式说明</h6>
-                                            <ul class="small mb-0">
-                                                <li>第一列为prompts内容</li>
-                                                <li>支持 .xlsx 和 .xls 格式</li>
-                                                <li>建议每行一个prompt</li>
-                                                <li>最多支持1000行数据</li>
-                                            </ul>
+                                    <div class="col-md-6">
+                                        <div class="card bg-light">
+                                            <div class="card-body">
+                                                <h6 class="card-title">Excel 格式说明</h6>
+                                                <ul class="small mb-0">
+                                                    <li>第一列为prompts内容</li>
+                                                    <li>支持 .xlsx 和 .xls 格式</li>
+                                                    <li>建议每行一个prompt</li>
+                                                    <li>最多支持1000行数据</li>
+                                                </ul>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <!-- 文本输入区域 -->
-                <div class="card input-section" id="textSection">
-                    <div class="card-header bg-success text-white">
-                        <h5 class="mb-0">
-                            <i class="bi bi-textarea-t"></i> 输入Prompts文本
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <form action="{{ url_for('upload_page') }}" method="post" id="textForm">
+                    <!-- 文本输入区域 -->
+                    <div class="card input-section" id="textSection">
+                        <div class="card-header bg-success text-white">
+                            <h5 class="mb-0">
+                                <span class="step-number">1</span>
+                                输入Prompts文本
+                            </h5>
+                        </div>
+                        <div class="card-body">
                             <div class="mb-3">
                                 <label for="prompts_text" class="form-label">请输入提示词（每行一个）：</label>
                                 <textarea class="form-control" id="prompts_text" name="prompts_text" 
-                                          rows="12" placeholder="推荐一些好用的项目管理工具&#10;什么是最佳的云服务提供商&#10;如何选择数据库系统&#10;分析当前市场上主流的AI聊天工具&#10;&#10;（每行一个提示词，最多1000条）" required></textarea>
+                                          rows="12" placeholder="推荐一些好用的项目管理工具&#10;什么是最佳的云服务提供商&#10;如何选择数据库系统&#10;分析当前市场上主流的AI聊天工具&#10;&#10;（每行一个提示词，最多1000条）"></textarea>
                                 <div class="form-text">
                                     <i class="bi bi-info-circle"></i> 每行输入一个提示词，最多支持1000条。可以直接从其他地方复制粘贴。
                                 </div>
@@ -293,14 +314,148 @@
                                     </small>
                                 </div>
                             </div>
-                            <div class="d-grid">
-                                <button type="submit" class="btn btn-success">
-                                    <i class="bi bi-arrow-right"></i> 继续配置
-                                </button>
-                            </div>
-                        </form>
+                        </div>
                     </div>
-                </div>
+
+                    <!-- 重用文件的隐藏字段 -->
+                    <input type="hidden" id="reuse_upload_id" name="reuse_upload_id" value="">
+
+                    <!-- API配置选择 -->
+                    <div class="card config-section" id="apiConfigSection" style="display: none;">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">
+                                <span class="step-number">2</span>
+                                选择API配置
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            {% if api_configs %}
+                                <div class="row">
+                                    {% for config in api_configs %}
+                                    <div class="col-md-6 mb-3">
+                                        <div class="config-option" onclick="selectApiConfig({{ config.id }})">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="radio" name="api_config" 
+                                                       id="api{{ config.id }}" value="{{ config.id }}" 
+                                                       {% if config.is_default %}checked{% endif %} required>
+                                                <label class="form-check-label w-100" for="api{{ config.id }}">
+                                                    <div class="d-flex justify-content-between align-items-start">
+                                                        <div>
+                                                            <h6 class="mb-1">{{ config.name }}</h6>
+                                                            <small class="text-muted">{{ config.endpoint[:50] }}{% if config.endpoint|length > 50 %}...{% endif %}</small>
+                                                            {% if config.model %}
+                                                                <br><small class="badge bg-secondary">{{ config.model }}</small>
+                                                            {% endif %}
+                                                        </div>
+                                                        {% if config.is_default %}
+                                                            <span class="badge bg-primary">默认</span>
+                                                        {% endif %}
+                                                    </div>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle"></i>
+                                    您还没有配置API。
+                                    <a href="{{ url_for('api_configs') }}" class="alert-link">立即配置</a>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- 品牌配置 -->
+                    <div class="card config-section" id="brandConfigSection" style="display: none;">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">
+                                <span class="step-number">3</span>
+                                品牌监测配置
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label for="brands" class="form-label">品牌名称</label>
+                                    <textarea class="form-control" id="brands" name="brands" rows="3" 
+                                              placeholder="请输入要监测的品牌名称，多个品牌用英文逗号分隔&#10;例如：Apple, Google, Microsoft"></textarea>
+                                    <div class="form-text">监测内容中是否提及这些品牌</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="domains" class="form-label">域名</label>
+                                    <textarea class="form-control" id="domains" name="domains" rows="3" 
+                                              placeholder="请输入要监测的域名，多个域名用英文逗号分隔&#10;例如：apple.com, google.com, microsoft.com"></textarea>
+                                    <div class="form-text">监测内容中是否提及这些域名</div>
+                                </div>
+                            </div>
+                            
+                            {% if brand_configs %}
+                                <div class="mt-4">
+                                    <h6>或选择已保存的品牌配置：</h6>
+                                    <div class="row">
+                                        {% for config in brand_configs %}
+                                        <div class="col-md-6 mb-2">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm w-100" 
+                                                    onclick="loadBrandConfig('{{ config.brand_names|join(',') }}', '{{ config.website_domains|join(',') }}')">
+                                                <i class="bi bi-bookmark"></i>
+                                                品牌：{{ config.brand_names[:2]|join(', ') }}{% if config.brand_names|length > 2 %}等{{ config.brand_names|length }}个{% endif %}
+                                                {% if config.website_domains %}
+                                                    | 域名：{{ config.website_domains|length }}个
+                                                {% endif %}
+                                            </button>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- 任务设置 -->
+                    <div class="card config-section" id="taskConfigSection" style="display: none;">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">
+                                <span class="step-number">4</span>
+                                任务设置
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <label for="task_name" class="form-label">任务名称</label>
+                                    <input type="text" class="form-control" id="task_name" name="task_name" 
+                                           value="" 
+                                           placeholder="请输入任务名称" required>
+                                    <div class="form-text">给这次分析起个名字，方便后续查找</div>
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="max_concurrent" class="form-label">并发数</label>
+                                    <select class="form-select" id="max_concurrent" name="max_concurrent">
+                                        <option value="1">1（较慢但稳定）</option>
+                                        <option value="3" selected>3（推荐）</option>
+                                        <option value="5">5（较快但可能不稳定）</option>
+                                    </select>
+                                    <div class="form-text">同时发送的请求数量</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 提交按钮 -->
+                    <div class="text-center mb-5 config-section" id="submitSection" style="display: none;">
+                        <button type="submit" class="btn btn-primary btn-lg px-5" id="submitBtn">
+                            <i class="bi bi-play-circle"></i> 开始分析
+                        </button>
+                        <div class="mt-3">
+                            <small class="text-muted">
+                                <i class="bi bi-info-circle"></i>
+                                分析过程可能需要几分钟时间，请耐心等待
+                            </small>
+                        </div>
+                    </div>
+                </form>
 
                 <!-- 配置状态信息 -->
                 <div class="card">
@@ -342,7 +497,7 @@
                             <div class="col-md-6">
                                 <div class="d-flex align-items-center">
                                     <i class="bi bi-info-circle text-info me-2"></i>
-                                    <span>可在下一步配置品牌</span>
+                                    <span>可在配置步骤中设置品牌</span>
                                 </div>
                             </div>
                             {% endif %}
@@ -352,230 +507,62 @@
             </div>
         </div>
     </div>
-
-    <!-- 配置表单区域 - 只在上传完成后显示 -->
-    {% if show_config %}
-    <div class="container mt-4">
-        <div class="row">
-            <!-- Prompts预览 -->
-            <div class="col-lg-4 mb-4">
-                <div class="card">
-                    <div class="card-header bg-info text-white">
-                        <h5 class="mb-0">
-                            <i class="bi bi-eye"></i> 提示词预览
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <p class="text-muted">共 {{ total_prompts }} 个提示词</p>
-                        <div class="preview-box" style="background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 1rem; max-height: 300px; overflow-y: auto;">
-                            {% for prompt in prompts %}
-                                <div class="mb-2 p-2 bg-white border rounded">
-                                    <small class="text-muted">{{ loop.index }}.</small>
-                                    {{ prompt[:100] }}{% if prompt|length > 100 %}...{% endif %}
-                                </div>
-                            {% endfor %}
-                            {% if total_prompts > 10 %}
-                                <div class="text-center text-muted">
-                                    <small>还有 {{ total_prompts - 10 }} 个提示词...</small>
-                                </div>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 配置表单 -->
-            <div class="col-lg-8">
-                <form method="POST" action="{{ url_for('run_analysis') }}">
-                    {% if file_path %}
-                    <input type="hidden" name="file_path" value="{{ file_path }}">
-                    {% endif %}
-                    {% if prompts_text %}
-                    <input type="hidden" name="prompts_text" value="{{ prompts_text }}">
-                    {% endif %}
-                    
-                    <!-- 任务名称 -->
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h5 class="mb-0">
-                                <i class="bi bi-tag"></i> 任务信息
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <div class="mb-3">
-                                <label for="task_name" class="form-label">任务名称</label>
-                                <input type="text" class="form-control" id="task_name" name="task_name" 
-                                       value="" required>
-                                <div class="form-text">为本次分析任务设置一个名称，便于后续查找</div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- 品牌监测配置 -->
-                    <div class="card mb-4">
-                        <div class="card-header bg-primary text-white">
-                            <h5 class="mb-0">
-                                <i class="bi bi-bullseye"></i> 品牌监测配置
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="mb-3">
-                                        <label for="brands" class="form-label">品牌名称 *</label>
-                                        <input type="text" class="form-control" id="brands" name="brands" 
-                                               placeholder="例如: 苹果,华为,小米" required>
-                                        <div class="form-text">多个品牌用逗号分隔</div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="mb-3">
-                                        <label for="domains" class="form-label">网站域名</label>
-                                        <input type="text" class="form-control" id="domains" name="domains" 
-                                               placeholder="例如: apple.com,huawei.com">
-                                        <div class="form-text">多个域名用逗号分隔（可选）</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- API配置选择 -->
-                    <div class="card mb-4">
-                        <div class="card-header bg-success text-white">
-                            <h5 class="mb-0">
-                                <i class="bi bi-robot"></i> API配置
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            {% if api_configs %}
-                            <div class="mb-3">
-                                <label for="api_config" class="form-label">选择API配置 *</label>
-                                <select class="form-select" id="api_config" name="api_config" required>
-                                    <option value="">请选择API配置</option>
-                                    {% for config in api_configs %}
-                                    <option value="{{ config.id }}">{{ config.name }} ({{ config.endpoint }})</option>
-                                    {% endfor %}
-                                </select>
-                                <div class="form-text">
-                                    选择已保存的API配置，或 
-                                    <a href="{{ url_for('api_configs') }}" target="_blank">点击新建API配置</a>
-                                </div>
-                            </div>
-                            {% else %}
-                            <div class="alert alert-warning">
-                                <i class="bi bi-exclamation-triangle me-2"></i>
-                                您还没有配置API，请先 <a href="{{ url_for('api_configs') }}" target="_blank">创建API配置</a>
-                            </div>
-                            {% endif %}
-                        </div>
-                    </div>
-
-                    <!-- 执行设置 -->
-                    <div class="card mb-4">
-                        <div class="card-header bg-warning text-dark">
-                            <h5 class="mb-0">
-                                <i class="bi bi-gear"></i> 执行设置
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="mb-3">
-                                        <label for="max_concurrent" class="form-label">并发数设置</label>
-                                        <select class="form-select" id="max_concurrent" name="max_concurrent">
-                                            <option value="1">1 (顺序执行)</option>
-                                            <option value="3" selected>3 (推荐)</option>
-                                            <option value="5">5 (较快)</option>
-                                            <option value="10">10 (快速)</option>
-                                        </select>
-                                        <div class="form-text">
-                                            <small>
-                                                <i class="bi bi-info-circle me-1"></i>
-                                                并发数越高速度越快，但可能触发API限流
-                                            </small>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="mb-3">
-                                        <label for="timeout" class="form-label">超时时间 (秒)</label>
-                                        <select class="form-select" id="timeout" name="timeout">
-                                            <option value="15">15秒</option>
-                                            <option value="30" selected>30秒 (推荐)</option>
-                                            <option value="60">60秒</option>
-                                            <option value="120">120秒</option>
-                                        </select>
-                                        <div class="form-text">
-                                            <small>
-                                                <i class="bi bi-clock me-1"></i>
-                                                每个请求的超时时间
-                                            </small>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 注意事项 -->
-                    <div class="card mb-4">
-                        <div class="card-header bg-info text-white">
-                            <h5 class="mb-0">
-                                <i class="bi bi-info-circle"></i> 注意事项
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <div class="alert alert-info">
-                                <h6><i class="bi bi-info-circle me-2"></i>MVP版本限制：</h6>
-                                <ul class="mb-0">
-                                    <li>最多处理前20个提示词</li>
-                                    <li>支持OpenAI、Claude和其他兼容格式</li>
-                                    <li>查询结果会保存到本地文件</li>
-                                    <li>请确保API密钥有足够的额度</li>
-                                </ul>
-                            </div>
-                            <div class="alert alert-warning">
-                                <h6><i class="bi bi-exclamation-triangle me-2"></i>并发设置建议：</h6>
-                                <ul class="mb-0">
-                                    <li><strong>新API测试</strong>：建议使用并发数1</li>
-                                    <li><strong>稳定API</strong>：可以使用并发数3-5</li>
-                                    <li><strong>高性能API</strong>：可尝试并发数10，但注意限流</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="text-center">
-                        <button type="submit" class="btn btn-primary btn-lg me-3">
-                            <i class="bi bi-play-circle"></i> 开始批量分析
-                        </button>
-                        <button type="button" class="btn btn-outline-secondary btn-lg" onclick="window.location.reload()">
-                            <i class="bi bi-arrow-clockwise"></i> 重新上传
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-    {% endif %}
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        let currentMethod = null;
+        let hasInputContent = false;
+
         // 显示输入方式
         function showMethod(method) {
             // 隐藏所有输入区域
             document.querySelectorAll('.input-section').forEach(section => {
-                section.classList.remove('active');
+                section.style.display = 'none';
             });
             
             // 显示选择的输入区域
             if (method === 'file') {
-                document.getElementById('fileSection').classList.add('active');
+                document.getElementById('fileSection').style.display = 'block';
                 document.getElementById('fileSection').scrollIntoView({behavior: 'smooth'});
+                currentMethod = 'file';
             } else if (method === 'text') {
-                document.getElementById('textSection').classList.add('active');
+                document.getElementById('textSection').style.display = 'block';
                 document.getElementById('textSection').scrollIntoView({behavior: 'smooth'});
+                currentMethod = 'text';
+            }
+            
+            // 检查是否应该显示配置区域
+            checkAndShowConfig();
+        }
+
+        // 重用历史文件
+        function reuseFile(uploadId, filename, promptsCount) {
+            // 设置重用文件的标识
+            document.getElementById('reuse_upload_id').value = uploadId;
+            
+            // 显示文件信息
+            document.getElementById('fileName').textContent = filename;
+            document.getElementById('fileInfo').classList.remove('d-none');
+            
+            // 显示文件上传区域
+            showMethod('file');
+            
+            // 标记有输入内容
+            hasInputContent = true;
+            checkAndShowConfig();
+            
+            // 滚动到配置区域
+            setTimeout(() => {
+                document.getElementById('apiConfigSection').scrollIntoView({behavior: 'smooth'});
+            }, 300);
+        }
+
+        // 检查并显示配置区域
+        function checkAndShowConfig() {
+            if (hasInputContent) {
+                document.querySelectorAll('.config-section').forEach(section => {
+                    section.style.display = 'block';
+                });
             }
         }
 
@@ -622,6 +609,15 @@
                 fileInfo.classList.remove('d-none');
                 uploadArea.style.borderColor = '#28a745';
                 uploadArea.style.backgroundColor = '#f8fff9';
+                
+                // 标记有输入内容
+                hasInputContent = true;
+                checkAndShowConfig();
+                
+                // 滚动到配置区域
+                setTimeout(() => {
+                    document.getElementById('apiConfigSection').scrollIntoView({behavior: 'smooth'});
+                }, 300);
             }
         }
 
@@ -657,7 +653,7 @@
             }
         });
 
-        // 文本区域行数统计
+        // 文本区域行数统计和输入检测
         const textArea = document.getElementById('prompts_text');
         const lineCount = document.getElementById('lineCount');
 
@@ -672,6 +668,18 @@
             } else {
                 lineCount.style.color = '#6c757d';
             }
+            
+            // 检查是否有内容
+            if (lines.length > 0) {
+                hasInputContent = true;
+                checkAndShowConfig();
+            } else {
+                hasInputContent = false;
+                // 隐藏配置区域
+                document.querySelectorAll('.config-section').forEach(section => {
+                    section.style.display = 'none';
+                });
+            }
         }
 
         textArea.addEventListener('input', updateLineCount);
@@ -679,25 +687,48 @@
             setTimeout(updateLineCount, 10);
         });
 
-        // 自动生成任务名称
-        function generateTaskName() {
-            const now = new Date();
-            const timestamp = now.getFullYear().toString() + 
-                              (now.getMonth() + 1).toString().padStart(2, '0') + 
-                              now.getDate().toString().padStart(2, '0') + '_' +
-                              now.getHours().toString().padStart(2, '0') + 
-                              now.getMinutes().toString().padStart(2, '0') + 
-                              now.getSeconds().toString().padStart(2, '0');
-            return '任务_' + timestamp;
+        // API配置选择
+        function selectApiConfig(configId) {
+            document.getElementById('api' + configId).checked = true;
+            
+            // 更新样式
+            document.querySelectorAll('.config-option').forEach(option => {
+                option.classList.remove('selected');
+            });
+            event.currentTarget.classList.add('selected');
         }
 
-        // 在页面加载时设置默认任务名称
-        document.addEventListener('DOMContentLoaded', function() {
-            const taskNameInput = document.getElementById('task_name');
-            if (taskNameInput && !taskNameInput.value) {
-                taskNameInput.value = generateTaskName();
+        // 加载品牌配置
+        function loadBrandConfig(brands, domains) {
+            document.getElementById('brands').value = brands;
+            document.getElementById('domains').value = domains;
+        }
+
+        // 表单提交处理
+        document.getElementById('analysisForm').addEventListener('submit', function(e) {
+            const submitBtn = document.getElementById('submitBtn');
+            const brands = document.getElementById('brands').value.trim();
+            const domains = document.getElementById('domains').value.trim();
+            
+            if (!brands && !domains) {
+                e.preventDefault();
+                alert('请至少输入一个品牌名称或域名进行监测');
+                return;
             }
+            
+            // 禁用提交按钮防止重复提交
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> 正在启动分析...';
         });
+
+        // 初始化任务名称时间戳
+        const now = new Date();
+        const timestamp = now.getFullYear() + '-' + 
+                         String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                         String(now.getDate()).padStart(2, '0') + '_' + 
+                         String(now.getHours()).padStart(2, '0') + '-' + 
+                         String(now.getMinutes()).padStart(2, '0');
+        document.getElementById('task_name').value = '品牌监测_' + timestamp;
     </script>
 </body>
 </html>

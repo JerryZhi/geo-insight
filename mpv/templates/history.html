@@ -54,7 +54,7 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('new_task') }}">
+                        <a class="nav-link" href="{{ url_for('upload_page') }}">
                             <i class="bi bi-plus-circle"></i> 新建任务
                         </a>
                     </li>
@@ -103,7 +103,7 @@
                 <h2><i class="bi bi-clock-history text-primary"></i> 查询历史</h2>
                 <p class="text-muted">查看所有监测任务的历史记录和结果</p>
             </div>
-            <a href="{{ url_for('new_task') }}" class="btn btn-primary">
+            <a href="{{ url_for('upload_page') }}" class="btn btn-primary">
                 <i class="bi bi-plus"></i> 新建任务
             </a>
         </div>
@@ -288,7 +288,7 @@
                         <i class="bi bi-inbox" style="font-size: 4rem; color: #ccc;"></i>
                         <h4 class="mt-3 text-muted">还没有任务记录</h4>
                         <p class="text-muted">创建您的第一个监测任务</p>
-                        <a href="{{ url_for('new_task') }}" class="btn btn-primary">
+                        <a href="{{ url_for('upload_page') }}" class="btn btn-primary">
                             <i class="bi bi-plus"></i> 新建任务
                         </a>
                     </div>
